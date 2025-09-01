@@ -1,19 +1,29 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/contexts/AuthContext";
 import { Heart, Shield, Users, Globe, BookOpen, TrendingUp, Check, Star, ArrowRight, Menu, X, Sun, Moon, Download } from 'lucide-react';
 
 const Index = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [selectedTier, setSelectedTier] = useState('community_advocate');
   const [expandedSDG, setExpandedSDG] = useState(null);
+  
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   // PWA Install Prompt
   useEffect(() => {
@@ -218,14 +228,14 @@ const Index = () => {
                 {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               <Button 
-                onClick={() => setShowLoginModal(true)}
+                onClick={() => navigate('/auth')}
                 variant="ghost"
                 size="sm"
               >
                 Login
               </Button>
               <Button 
-                onClick={() => setShowRegisterModal(true)}
+                onClick={() => navigate('/auth')}
                 size="sm"
                 className="health-button"
               >
@@ -261,14 +271,14 @@ const Index = () => {
                   </Button>
                   <div className="flex gap-2">
                     <Button 
-                      onClick={() => setShowLoginModal(true)}
+                      onClick={() => navigate('/auth')}
                       variant="ghost"
                       size="sm"
                     >
                       Login
                     </Button>
                     <Button 
-                      onClick={() => setShowRegisterModal(true)}
+                      onClick={() => navigate('/auth')}
                       size="sm"
                       className="health-button"
                     >
@@ -316,7 +326,7 @@ const Index = () => {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Button 
-                onClick={() => setShowRegisterModal(true)}
+                onClick={() => navigate('/auth')}
                 size="lg"
                 className="health-button text-lg px-8 py-4"
               >
@@ -546,7 +556,7 @@ const Index = () => {
                   <Button 
                     className={`w-full ${tier.popular ? 'health-button' : ''}`}
                     variant={tier.popular ? 'default' : 'outline'}
-                    onClick={() => setShowRegisterModal(true)}
+                    onClick={() => navigate('/auth')}
                   >
                     {tier.price === 'Free' ? 'Get Started Free' : `Subscribe ${tier.price}`}
                   </Button>
@@ -589,175 +599,6 @@ const Index = () => {
           </div>
         </div>
       </section>
-
-      {/* Login Modal */}
-      {showLoginModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Welcome Back</CardTitle>
-                <Button 
-                  onClick={() => setShowLoginModal(false)}
-                  variant="ghost"
-                  size="sm"
-                  className="p-1"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <CardDescription>
-                Sign in to continue your health journey
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
-                <input 
-                  type="email" 
-                  className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="your@email.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Password</label>
-                <input 
-                  type="password" 
-                  className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="••••••••"
-                />
-              </div>
-              <Button className="w-full health-button">
-                Sign In
-              </Button>
-              <div className="text-center">
-                <Button 
-                  variant="link" 
-                  onClick={() => {
-                    setShowLoginModal(false);
-                    setShowRegisterModal(true);
-                  }}
-                  className="text-sm"
-                >
-                  Don't have an account? Sign up
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Register Modal */}
-      {showRegisterModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Join the Movement</CardTitle>
-                <Button 
-                  onClick={() => setShowRegisterModal(false)}
-                  variant="ghost"
-                  size="sm"
-                  className="p-1"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <CardDescription>
-                Start your journey toward better health and global impact
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Full Name</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="John Doe"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
-                <input 
-                  type="email" 
-                  className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="your@email.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Password</label>
-                <input 
-                  type="password" 
-                  className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="••••••••"
-                />
-              </div>
-              
-              {/* Tier Selection in Modal */}
-              <div className="space-y-3">
-                <label className="text-sm font-medium">Choose Your Tier</label>
-                <div className="space-y-2">
-                  {tiers.map((tier) => (
-                    <div 
-                      key={tier.id}
-                      className={`p-3 border rounded-lg cursor-pointer transition-all ${
-                        selectedTier === tier.id ? 'border-primary bg-primary/5' : 'border-input'
-                      }`}
-                      onClick={() => setSelectedTier(tier.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{tier.name}</div>
-                          <div className="text-sm text-muted-foreground">{tier.price}</div>
-                        </div>
-                        <div className={`w-4 h-4 rounded-full border-2 ${
-                          selectedTier === tier.id ? 'border-primary bg-primary' : 'border-muted-foreground'
-                        }`}>
-                          {selectedTier === tier.id && (
-                            <div className="w-2 h-2 bg-white rounded-full m-0.5"></div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <input type="checkbox" id="consent" className="rounded border-input" />
-                  <label htmlFor="consent" className="text-sm">
-                    I consent to anonymous data sharing for global health research
-                  </label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input type="checkbox" id="terms" className="rounded border-input" />
-                  <label htmlFor="terms" className="text-sm">
-                    I agree to the Terms of Service and Privacy Policy
-                  </label>
-                </div>
-              </div>
-
-              <Button className="w-full health-button">
-                Create Account & Start Journey
-              </Button>
-              
-              <div className="text-center">
-                <Button 
-                  variant="link" 
-                  onClick={() => {
-                    setShowRegisterModal(false);
-                    setShowLoginModal(true);
-                  }}
-                  className="text-sm"
-                >
-                  Already have an account? Sign in
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 };
