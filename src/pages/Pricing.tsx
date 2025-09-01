@@ -539,14 +539,14 @@ const Pricing = () => {
       {paymentModal.isOpen && paymentModal.selectedTierInfo && paymentModal.tier && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="relative w-full max-w-md max-h-[90vh] overflow-auto">
-            <Card className="bg-white shadow-2xl border-0">
+            <Card className="shadow-2xl border-0">
               {/* Close Button - Top Right Corner */}
               <div className="absolute top-4 right-4 z-20">
                 <Button
                   onClick={() => setPaymentModal({ isOpen: false, action: 'register' })}
                   variant="ghost"
                   size="sm"
-                  className="h-10 w-10 rounded-full bg-white/90 hover:bg-white text-gray-700 hover:text-gray-900 border border-gray-300 hover:border-gray-500 shadow-lg transition-all duration-200"
+                  className="h-10 w-10 rounded-full shadow-lg transition-all duration-200"
                   aria-label="Close payment modal"
                 >
                   ✕
@@ -569,7 +569,7 @@ const Pricing = () => {
 
               <CardContent className="space-y-6">
                 {/* Package Details */}
-                <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border">
+                <div className="bg-card rounded-lg p-4 border">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold text-lg">Package Details</h3>
                     <Badge className={`${paymentModal.selectedTierInfo.color} text-white`}>
@@ -660,7 +660,7 @@ const Pricing = () => {
                       <input
                         type="tel"
                         placeholder="+254712345678"
-                        className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-muted-foreground"
                         onChange={(e) => setPhoneNumber(e.target.value)}
                         value={phoneNumber}
                       />
