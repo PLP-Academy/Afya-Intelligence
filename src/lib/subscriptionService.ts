@@ -312,7 +312,12 @@ export async function initiateSTKPush(
   accountReference: string,
   transactionDesc: string
 ): Promise<InstasendSTKPushResponse> {
-  const response = await fetch('https://sandbox.intasend.com/api/v1/payment/collection/stk-push/', {
+  // Use local proxy in development to avoid CORS issues
+  const baseUrl = import.meta.env.DEV
+    ? '/api/intasend/v1/payment/collection/stk-push/'
+    : 'https://sandbox.intasend.com/api/v1/payment/collection/stk-push/';
+
+  const response = await fetch(baseUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
