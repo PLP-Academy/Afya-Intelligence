@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Heart, 
   Plus, 
@@ -25,9 +27,10 @@ import {
 } from 'lucide-react';
 
 const Dashboard = () => {
+  const { user: authUser } = useAuth();
   const [user, setUser] = useState({
-    name: 'John Doe',
-    email: 'john@example.com',
+    name: authUser?.user_metadata?.full_name || 'User',
+    email: authUser?.email || '',
     tier: 'health_champion',
     joinDate: '2024-01-15',
     educationCompleted: true
@@ -64,6 +67,15 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    // Update user data when authUser changes
+    if (authUser) {
+      setUser(prev => ({
+        ...prev,
+        name: authUser.user_metadata?.full_name || 'User',
+        email: authUser.email || ''
+      }));
+    }
+    
     // Load user data and symptoms
     loadUserData();
     loadSymptoms();
@@ -84,7 +96,7 @@ const Dashboard = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [authUser]);
 
   const loadUserData = async () => {
     // TODO: Load from Supabase
@@ -595,13 +607,12 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Symptom</label>
-                <input 
-                  type="text" 
+                <label className="text-sm font-medium">Symptom Description</label>
+                <Textarea
                   value={newSymptom}
                   onChange={(e) => setNewSymptom(e.target.value)}
-                  className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="e.g., Headache, Fatigue, Nausea..."
+                  placeholder="Describe your symptom in detail (e.g., Sharp headache on left side, lasted 2 hours)"
+                  className="min-h-[100px] resize-none"
                 />
               </div>
               
