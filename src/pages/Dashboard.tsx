@@ -5,11 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, Enums } from '@/integrations/supabase/types';
+import { generateAIInsights, getEducationalInsight } from '@/lib/aiInsights';
 import {
   Heart,
   Plus,
@@ -28,7 +30,9 @@ import {
   Settings,
   LogOut,
   Bell,
-  Loader2
+  Loader2,
+  Phone,
+  Shield
 } from 'lucide-react';
 
 type Symptom = Tables<'symptoms'> & { severity: number; pending?: boolean }; // Assuming severity is added to symptoms table
@@ -42,11 +46,61 @@ const Dashboard = () => {
 
   const [newSymptom, setNewSymptom] = useState('');
   const [severity, setSeverity] = useState(1);
-  const [aiInsights, setAiInsights] = useState([]); // Still using mock for now
+  const [aiInsights, setAiInsights] = useState<any[]>([]);
+  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showLogForm, setShowLogForm] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [selectedCurrency, setSelectedCurrency] = useState('KES'); // Default to KES
+
+  // Currency exchange rates (base: USD)
+  const exchangeRates = {
+    USD: 1.0,
+    KES: 150.0,
+    EUR: 0.85,
+    GBP: 0.75,
+    CAD: 1.25,
+    AUD: 1.35,
+    JPY: 150.0,
+  };
+
+  // Currency symbols
+  const currencySymbols = {
+    USD: '$',
+    KES: 'KES ',
+    EUR: '€',
+    GBP: '£',
+    CAD: 'CAD$',
+    AUD: 'AUD$',
+    JPY: '¥',
+  };
+
+  // Function to convert USD price to selected currency
+  const convertPrice = (usdPrice: number, currency: string) => {
+    const rate = exchangeRates[currency as keyof typeof exchangeRates] || 1.0;
+    return Math.round(usdPrice * rate * 100) / 100; // Round to 2 decimal places
+  };
+
+  // Function to format price display
+  const formatPrice = (usdPrice: number, currency: string) => {
+    if (usdPrice === 0) return 'Free';
+    const converted = convertPrice(usdPrice, currency);
+    const symbol = currencySymbols[currency as keyof typeof currencySymbols];
+    return `${symbol}${converted}`;
+  };
+
+  // Add payment functions
+  const initiateUpgradePayment = async (tier: 'health_champion' | 'global_advocate') => {
+    const tierPrices = {
+      health_champion: 1.1,
+      global_advocate: 3.0,
+    };
+    const priceKES = tierPrices[tier] * 150; // Convert to KES using fixed rate
+
+    // Navigate to pricing page with currency selection
+    navigate('/pricing');
+  };
 
   const tierFeatures: Record<SubscriptionTier, { name: string; maxHistory: number; features: string[]; color: string }> = {
     community_advocate: {
@@ -104,6 +158,7 @@ const Dashboard = () => {
   // Mutation for logging a new symptom
   const logSymptomMutation = useMutation({
     mutationFn: async (symptomData: { symptom: string; severity: number; timestamp: string; user_id: string }) => {
+      console.log('Attempting to insert symptom:', symptomData);
       const { data, error } = await supabase
         .from('symptoms')
         .insert([{
@@ -113,12 +168,19 @@ const Dashboard = () => {
           user_id: symptomData.user_id,
         }])
         .select();
-      if (error) throw error;
+      
+      console.log('Supabase response:', { data, error });
+
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw error;
+      }
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['symptoms'] });
-      // TODO: Trigger AI insights update
+      // Clear insights to trigger regeneration when symptoms change
+      setAiInsights([]);
     },
     onError: (error: any) => { // Explicitly type error as any for now to access .message and .details
       console.error('Failed to log symptom:', error.message || error);
@@ -155,24 +217,62 @@ const Dashboard = () => {
     };
   }, []);
 
-  // Mock AI insights for now
+  // Generate AI insights when symptoms or user tier change
   useEffect(() => {
-    setAiInsights([
-      {
-        type: 'pattern',
-        message: 'You\'ve logged headaches 3 times this week. Consider tracking sleep and hydration.',
-        severity: 'medium'
-      },
-      {
-        type: 'alert',
-        message: 'Fatigue combined with headaches may indicate dehydration. Consult a healthcare provider if symptoms persist.',
-        severity: 'high'
+    if (!symptoms || !userProfile) return; // Wait for data to be loaded
+
+    const generateInsights = async () => {
+      // Only show loading if we have symptoms to analyze
+      setIsGeneratingInsights(true);
+
+      try {
+        // Use the user's subscription tier for insight generation
+        const userTier = (userProfile.tier as SubscriptionTier) || 'community_advocate';
+        const insights = await generateAIInsights([...symptoms], userTier);
+
+        setAiInsights(insights);
+      } catch (error) {
+        console.error('Failed to generate AI insights:', error);
+        // Fallback to basic educational insight
+        const fallbackInsight = getEducationalInsight('community_advocate');
+        setAiInsights([fallbackInsight]);
+      } finally {
+        setIsGeneratingInsights(false);
       }
-    ]);
-  }, [symptoms]); // Re-evaluate AI insights when symptoms change
+    };
+
+    // Small delay to prevent rapid re-generation
+    const timeoutId = setTimeout(() => {
+      generateInsights();
+    }, symptoms.length > 0 ? 500 : 0); // Small delay only when there are symptoms
+
+    return () => clearTimeout(timeoutId);
+  }, []); // Empty dependency array - only run once on mount
+
+  // Separate effect to update when key data changes (but NOT on every render)
+  useEffect(() => {
+    if (symptoms?.length > 0 && userProfile) {
+      setAiInsights([]); // Clear insights first to trigger re-generation
+    } else if (symptoms?.length === 0) {
+      // No symptoms logged yet, show welcome message
+      setAiInsights([{
+        type: 'education',
+        message: 'Welcome! Start logging your symptoms to receive personalized AI health insights.',
+        severity: 'low',
+        tierLevel: 'basic'
+      }]);
+    }
+  }, [symptoms?.length, userProfile?.tier]); // Only depend on length and tier, not the full symptoms array
 
   const handleLogSymptom = async () => {
-    if (!newSymptom.trim() || !authUser?.id) return;
+    console.log('handleLogSymptom called. Checking conditions...');
+    console.log('Symptom text:', newSymptom);
+    console.log('Auth user:', authUser);
+
+    if (!newSymptom.trim() || !authUser?.id) {
+      console.log('Condition failed. Exiting function.');
+      return;
+    }
 
     const symptomData = {
       symptom: newSymptom,
@@ -374,13 +474,47 @@ const Dashboard = () => {
         </div>
 
         {/* AI Insights */}
-        {aiInsights.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">AI Health Insights</h2>
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-xl font-semibold">AI Health Insights</h2>
+            {isGeneratingInsights && (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            )}
+            {userProfile?.tier === 'community_advocate' && (
+              <Badge variant="secondary" className="text-xs">
+                Basic AI
+              </Badge>
+            )}
+            {(userProfile?.tier === 'health_champion' || userProfile?.tier === 'global_advocate') && (
+              <Badge variant="outline" className="text-xs border-green-500 text-green-700">
+                Advanced AI
+              </Badge>
+            )}
+          </div>
+
+          {/* Show API key setup message if no key is configured */}
+          {!import.meta.env.VITE_HUGGING_FACE_API_KEY && (
+            <Alert className="mb-4 border-yellow-500">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>AI Insights Setup Incomplete:</strong>
+                <br />
+                1. Go to <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">Hugging Face Settings</a>
+                <br />
+                2. Create a new token with Read permission
+                <br />
+                3. Copy the token and add it to your <code>.env</code> file as <code>VITE_HUGGING_FACE_API_KEY="your_token_here"</code>
+                <br />
+                <em>Currently using fallback analysis for all insights.</em>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {aiInsights.length > 0 ? (
             <div className="space-y-4">
               {aiInsights.map((insight, index) => (
                 <Alert key={index} className={`${
-                  insight.severity === 'high' ? 'border-destructive' : 
+                  insight.severity === 'high' ? 'border-destructive' :
                   insight.severity === 'medium' ? 'border-yellow-500' : 'border-primary'
                 }`}>
                   {insight.severity === 'high' ? (
@@ -392,8 +526,23 @@ const Dashboard = () => {
                 </Alert>
               ))}
             </div>
-          </div>
-        )}
+          ) : !isGeneratingInsights ? (
+            <Card className="p-6 text-center">
+              <div className="text-muted-foreground">
+                {symptoms.length === 0
+                  ? "No insights available at the moment. Start logging symptoms to receive personalized health insights!"
+                  : "Processing your symptom data for personalized insights..."}
+              </div>
+            </Card>
+          ) : (
+            <Card className="p-6">
+              <div className="flex items-center justify-center gap-3">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <span>Generating personalized insights...</span>
+              </div>
+            </Card>
+          )}
+        </div>
 
         {/* Dashboard Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -521,31 +670,167 @@ const Dashboard = () => {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Tier Status */}
-            <Card className="health-card">
+            {/* Subscription Plan */}
+            <Card className="health-card border-2 border-primary/20">
               <CardHeader>
-                <CardTitle className="text-lg">Your Plan</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Your Subscription
+                </CardTitle>
+                <CardDescription>
+                  Manage your plan and access level
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${currentTier.color}`}></div>
-                    <span className="font-medium">{currentTier.name}</span>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {currentTier.features.map((feature, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
-                        <CheckCircle className="h-3 w-3 text-green-500" />
-                        {feature}
+                  {/* Current Plan */}
+                  <div className="p-4 rounded-lg border bg-background/50">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full ${currentTier.color}`}></div>
+                        <div>
+                          <div className="font-semibold">{currentTier.name}</div>
+                          {userProfile?.tier === 'community_advocate' && (
+                            <div className="text-sm text-muted-foreground">Free forever</div>
+                          )}
+                          {userProfile?.tier === 'health_champion' && (
+                            <div className="text-sm text-muted-foreground">Premium subscription</div>
+                          )}
+                          {userProfile?.tier === 'global_advocate' && (
+                            <div className="text-sm text-muted-foreground">Premium + Premium</div>
+                          )}
+                        </div>
                       </div>
-                    ))}
+                      <Badge
+                        className={`${
+                          userProfile?.tier === 'global_advocate' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
+                        {userProfile?.tier === 'global_advocate' ? 'Top Tier' : 'Active'}
+                      </Badge>
+                    </div>
+
+                    {/* Plan Features */}
+                    <div className="space-y-2">
+                      {currentTier.features.slice(0, 3).map((feature, index) => (
+                        <div key={index} className="flex items-center gap-2 text-xs">
+                          <CheckCircle className="h-3 w-3 text-green-500" />
+                          {feature}
+                        </div>
+                      ))}
+                      {currentTier.features.length > 3 && (
+                        <div className="text-xs text-muted-foreground ml-5">
+                          +{currentTier.features.length - 3} more features
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {userProfile?.tier === 'community_advocate' && (
-                    <Button className="w-full mt-4" variant="outline">
-                      Upgrade Plan
-                    </Button>
+                  {/* Upgrade Options */}
+                  {userProfile?.tier !== 'global_advocate' && (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium">Available Upgrades:</h4>
+
+                      {/* Health Champion Upgrade */}
+                      {userProfile?.tier === 'community_advocate' && (
+                        <div className="p-3 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                              <span className="font-medium text-sm">Health Champion</span>
+                            </div>
+                            <div className="text-sm font-semibold text-green-600">
+                              $1.10/month
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground mb-2">
+                            <span>✨ Advanced AI</span>
+                            <span>📊 Unlimited history</span>
+                          </div>
+                          <Button
+                            onClick={() => navigate('/pricing')}
+                            className="w-full text-xs h-7 bg-green-600 hover:bg-green-700"
+                          >
+                            Upgrade to Health Champion
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Global Advocate Upgrade */}
+                      {userProfile?.tier === 'health_champion' && (
+                        <div className="p-3 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                              <span className="font-medium text-sm">Global Advocate</span>
+                            </div>
+                            <div className="text-sm font-semibold text-purple-600">
+                              $3.00/month
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground mb-2">
+                            <span>🔬 Expert consultations</span>
+                            <span>👨‍👩‍👧 Family tracking</span>
+                          </div>
+                          <Button
+                            onClick={() => navigate('/pricing')}
+                            className="w-full text-xs h-7 bg-purple-600 hover:bg-purple-700"
+                          >
+                            Upgrade to Global Advocate
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Both tiers available */}
+                      {userProfile?.tier === 'community_advocate' && (
+                        <div className="p-3 border rounded-lg bg-purple-50/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                              <span className="font-medium text-sm">Global Advocate</span>
+                            </div>
+                            <div className="text-sm font-semibold text-purple-600">
+                              $3.00/month
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            All features included - best value!
+                          </div>
+                          <Button
+                            onClick={() => navigate('/pricing')}
+                            variant="outline"
+                            className="w-full text-xs h-7 border-purple-200 text-purple-700 hover:bg-purple-50"
+                          >
+                            Jump to Global Advocate
+                          </Button>
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t">
+                        <Button
+                          onClick={() => navigate('/pricing')}
+                          variant="outline"
+                          className="w-full text-sm"
+                        >
+                          View All Plans & Pricing Details
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Premium User */}
+                  {userProfile?.tier === 'global_advocate' && (
+                    <div className="text-center">
+                      <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                        <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                        <p className="text-sm font-medium text-green-800 mb-1">
+                          You're on our top tier!
+                        </p>
+                        <p className="text-xs text-green-700">
+                          Enjoy all premium features and help us achieve SDG 3.
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </div>
               </CardContent>

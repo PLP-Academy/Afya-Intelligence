@@ -4,21 +4,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { 
-  User, 
-  Heart, 
-  Settings, 
-  Shield, 
-  CreditCard, 
-  Bell, 
-  Globe, 
+import {
+  User,
+  Heart,
+  Settings,
+  Shield,
+  CreditCard,
+  Bell,
+  Globe,
   Download,
   Upload,
   Trash2,
   Star,
   ArrowRight,
+  Info,
   CheckCircle,
   XCircle,
   Menu,
@@ -28,14 +30,18 @@ import {
   LogOut
 } from 'lucide-react';
 
+// Removed subscription service imports - keeping only user profile functionality
+
 // Declare IntaSend on the Window interface
 declare global {
   interface Window {
-    IntaSend: any; // Replace 'any' with a more specific type if available
+    IntaSend?: (config: { publicAPIKey: string; live: boolean }) => {
+      on: (event: string, callback: (result: any) => void) => any;
+    };
   }
 }
 
-const INTASEND_PUBLISHABLE_KEY = "ISPubKey_test_ebbf5187-cad7-4cb6-92aa-03a2b738ce79"; // TODO: Replace with actual key from environment variables
+const INTASEND_PUBLISHABLE_KEY = import.meta.env.VITE_INTASEND_PUBLISHABLE_KEY || ""; // Use environment variable
 
 const Profile = () => {
   const { user: authUser, signOut } = useAuth();
@@ -58,42 +64,9 @@ const Profile = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  // Removed showUpgradeModal as IntaSend button handles payment directly
+  // Removed subscription and payment related state
 
-  const tierInfo = {
-    community_advocate: {
-      name: 'Community Advocate',
-      price: 'Free',
-      color: 'bg-blue-500',
-      features: ['30-day history', 'Basic AI', 'Education modules'],
-      nextTier: 'health_champion'
-    },
-    health_champion: {
-      name: 'Health Champion',
-      price: '$1/month',
-      color: 'bg-green-500', 
-      features: ['Unlimited history', 'Advanced AI', 'Weekly reports', 'Data export'],
-      nextTier: 'global_advocate'
-    },
-    global_advocate: {
-      name: 'Global Advocate',
-      price: '$3/month',
-      color: 'bg-purple-500',
-      features: ['All features', 'Family tracking', 'Expert consultations', 'Research participation'],
-      nextTier: null
-    }
-  };
-
-  const currentTier = tierInfo[user.tier];
-  const nextTier = currentTier.nextTier ? tierInfo[currentTier.nextTier] : null;
-
-  const subscriptionStats = {
-    totalContributions: 847,
-    impactPoints: 1234,
-    educationProgress: 100,
-    dataPoints: 456,
-    communityRank: 'Top 15%'
-  };
+  // Removed currency conversion and tier information - now handled in Dashboard/ Pricing pages
 
   useEffect(() => {
     if (authUser) {
@@ -114,36 +87,14 @@ const Profile = () => {
     
     // Load user data
     loadUserProfile();
-    
+  
     // Dark mode
     const isDark = localStorage.getItem('theme') === 'dark';
     setIsDarkMode(isDark);
     document.documentElement.classList.toggle('dark', isDark);
 
-    // Initialize IntaSend
-    if (window.IntaSend && INTASEND_PUBLISHABLE_KEY) { // Simplified check
-      new window.IntaSend({
-        publicAPIKey: INTASEND_PUBLISHABLE_KEY,
-        live: false, // Set to true for live environment
-      })
-      .on("COMPLETE", (results) => {
-        console.log("IntaSend Payment Complete:", results);
-        alert(`Payment for ${nextTier?.name} successful! Transaction ID: ${results.tracking_id}`);
-        // TODO: Update user tier in Supabase and local state
-        // For demo, just update locally
-        if (nextTier) {
-          setUser(prev => ({ ...prev, tier: nextTier.name.toLowerCase().replace(' ', '_') as 'community_advocate' | 'health_champion' | 'global_advocate' }));
-        }
-      })
-      .on("FAILED", (results) => {
-        console.log("IntaSend Payment Failed:", results);
-        alert(`Payment failed: ${results.message || 'Unknown error'}`);
-      })
-      .on("IN-PROGRESS", (results) => {
-        console.log("IntaSend Payment In Progress:", results);
-      });
-    }
-  }, [authUser, nextTier, user.tier]); // Added user.tier to dependency array
+    // Removed IntaSend initialization - now handled in Dashboard/Pricing pages
+  }, [authUser]); // Only depend on authUser to avoid infinite loops
 
   const loadUserProfile = async () => {
     // TODO: Load from Supabase
@@ -196,19 +147,12 @@ Generated: ${new Date().toISOString()}
 User Information:
 Name: ${user.fullName}
 Email: ${user.email}
-Tier: ${tierInfo[user.tier].name}
 Member Since: ${new Date(user.createdAt).toLocaleDateString()}
 
 Account Settings:
 Data Sharing Consent: ${user.dataSharingConsent ? 'Yes' : 'No'}
 Impact Notifications: ${user.impactNotifications ? 'Yes' : 'No'}
-Education Completed: ${user.educationCompleted ? 'Yes' : 'No'}
-
-Statistics:
-Total Contributions: ${subscriptionStats.totalContributions}
-Impact Points: ${subscriptionStats.impactPoints}
-Data Points Shared: ${subscriptionStats.dataPoints}
-Community Rank: ${subscriptionStats.communityRank}`;
+Education Completed: ${user.educationCompleted ? 'Yes' : 'No'}`;
 
       const blob = new Blob([csvContent], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
@@ -367,9 +311,9 @@ Community Rank: ${subscriptionStats.communityRank}`;
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main Profile */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="max-w-4xl mx-auto grid gap-6">
+          {/* Profile Content */}
+          <div className="space-y-6 w-full">
             {/* Basic Information */}
             <Card className="health-card">
               <CardHeader>
@@ -522,140 +466,44 @@ Community Rank: ${subscriptionStats.communityRank}`;
             </Card>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
             {/* Current Subscription */}
             <Card className="health-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CreditCard className="h-5 w-5" />
-                  Subscription
+                  Current Plan
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-4 h-4 rounded-full ${currentTier.color}`}></div>
-                    <div>
-                      <div className="font-medium">{currentTier.name}</div>
-                      <div className="text-sm text-muted-foreground">{currentTier.price}</div>
-                    </div>
-                  </div>
-
-                  {user.tier !== 'community_advocate' && (
-                    <div className="text-sm">
-                      <div className="text-muted-foreground">Next billing:</div>
-                      <div>{new Date(user.subscriptionEnd).toLocaleDateString()}</div>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">Features:</div>
-                    {currentTier.features.map((feature, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
-                        <CheckCircle className="h-3 w-3 text-green-500" />
-                        {feature}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                      <div>
+                        <div className="font-medium">{user.tier || 'Community Advocate'}</div>
+                        <div className="text-sm text-muted-foreground">Current subscription</div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
 
-                  {nextTier && (
-                    <Button 
-                      className="w-full mt-4 health-button intaSendPayButton"
-                      data-amount={nextTier.price === 'Free' ? '0' : nextTier.price.replace('$', '').replace('/month', '')}
-                      data-currency="KES" // Assuming KES as per documentation example, adjust if needed
-                      data-email={user.email}
-                      data-first_name={user.fullName.split(' ')[0]}
-                      data-last_name={user.fullName.split(' ').slice(1).join(' ')}
-                      data-api_ref={`upgrade_${nextTier.id}_${user.id}_${Date.now()}`}
+                    <Button
+                      onClick={() => navigate('/pricing')}
+                      variant="outline"
+                      className="border-blue-200 text-blue-600 hover:bg-blue-50"
                     >
-                      Upgrade to {nextTier.name}
+                      Manage Plan
                       <ArrowRight className="h-4 w-4 ml-2" />
                     </Button>
-                  )}
+                  </div>
+
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      Want to upgrade your plan or change payment methods? Visit the pricing page to view all available options.
+                    </AlertDescription>
+                  </Alert>
                 </div>
               </CardContent>
             </Card>
-
-            {/* Impact Statistics */}
-            <Card className="health-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  Your Impact
-                </CardTitle>
-                <CardDescription>
-                  How you're contributing to SDG 3
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Total Contributions</span>
-                    <span className="font-semibold text-primary">{subscriptionStats.totalContributions}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Impact Points</span>
-                    <span className="font-semibold text-primary">{subscriptionStats.impactPoints}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Data Points Shared</span>
-                    <span className="font-semibold text-primary">{subscriptionStats.dataPoints}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Community Rank</span>
-                    <span className="font-semibold text-primary">{subscriptionStats.communityRank}</span>
-                  </div>
-
-                  <div className="pt-4 border-t">
-                    <div className="text-sm font-medium mb-2">Education Progress</div>
-                    <Progress value={subscriptionStats.educationProgress} />
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {subscriptionStats.educationProgress}% Complete
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Account Summary */}
-            <Card className="health-card">
-              <CardHeader>
-                <CardTitle>Account Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Member since:</span>
-                    <span>{new Date(user.createdAt).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">User ID:</span>
-                    <span className="font-mono">{user.id}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Education:</span>
-                    <span className="flex items-center gap-1">
-                      {user.educationCompleted ? (
-                        <>
-                          <CheckCircle className="h-3 w-3 text-green-500" />
-                          Complete
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-3 w-3 text-red-500" />
-                          Incomplete
-                        </>
-                      )}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </div>
 

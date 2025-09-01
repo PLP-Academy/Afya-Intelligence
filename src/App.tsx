@@ -9,6 +9,9 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
+import Pricing from "./pages/Pricing";
+import PaymentCompletion from "./pages/PaymentCompletion";
+import SymptomViewer from "./pages/SymptomViewer";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +36,8 @@ const App = () => (
                 <Profile />
               </ProtectedRoute>
             } />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/payment-completion" element={<PaymentCompletion />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

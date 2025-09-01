@@ -15,3 +15,34 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+export async function getSymptoms(userId?: string) {
+  if (userId) {
+    const { data, error } = await supabase
+      .from('symptoms')
+      .select('*')
+      .eq('user_id', userId)
+      .order('timestamp', { ascending: false });
+    return { data, error };
+  }
+
+  // Get current user's symptoms
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { data: null, error: 'No authenticated user' };
+
+  const { data, error } = await supabase
+    .from('symptoms')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('timestamp', { ascending: false });
+  return { data, error };
+}
+
+export async function logSymptom(symptomData: { symptom: string; severity: string; userId: string }) {
+  const { data, error } = await supabase
+    .from('symptoms')
+    .insert([
+      { symptom: symptomData.symptom, severity: symptomData.severity, user_id: symptomData.userId },
+    ]);
+  return { data, error };
+}

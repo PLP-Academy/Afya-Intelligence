@@ -8,7 +8,7 @@ SDG Wellspring Health is a web application designed to empower individuals in tr
 
 *   **User Authentication:** Secure signup and login powered by Supabase.
 *   **Symptom Tracking:** Users can log symptoms with severity levels, contributing to personal health records and aggregated data for global health insights.
-*   **AI Health Insights:** Provides basic AI-driven patterns and alerts based on logged symptoms (currently mocked, with potential for future expansion).
+*   **AI Health Insights:** Provides AI-driven patterns and alerts based on logged symptoms using Hugging Face models, with pattern analysis and personalized recommendations.
 *   **SDG 3 Education Hub:** Interactive content explaining UN SDG 3 targets and how user contributions make an impact.
 *   **Tiered Subscriptions:** Offers different plans (Community Advocate, Health Champion, Global Advocate) with varying features, with payments handled via Intasend.
 *   **PWA Support:** Installable as a Progressive Web App for an enhanced mobile experience and offline capabilities.
