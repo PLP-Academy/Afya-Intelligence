@@ -217,10 +217,19 @@ const Pricing = () => {
       if (selectedPaymentMethod === 'mpesa' && phoneNumber) {
         try {
           if (action === 'upgrade' && authUser) {
+            // Fetch the actual user profile before upgrading
+            const userProfile = await getUserProfile(authUser.id);
+
+            if (!userProfile) {
+              alert('User profile not found. Please try logging out and in again.');
+              setIsLoading(false);
+              return;
+            }
+
             // Handle user upgrade
             const result = await initiateUpgradeWithPayment(
               authUser.id,
-              null, // We'll get user profile from the function
+              userProfile, // Pass actual user profile
               tier as 'health_champion' | 'global_advocate',
               amount
             );
@@ -246,7 +255,7 @@ const Pricing = () => {
               userData.email,
               userData.fullName,
               userData.phoneNumber,
-              tier as any,
+              tier as 'health_champion' | 'global_advocate',
               amount
             );
 
@@ -529,166 +538,171 @@ const Pricing = () => {
       {/* IntaSend Payment Modal */}
       {paymentModal.isOpen && paymentModal.selectedTierInfo && paymentModal.tier && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg bg-white shadow-2xl border-0">
-            <CardHeader className="text-center pb-2">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-2">
-                  <div className={`w-10 h-10 ${paymentModal.selectedTierInfo.color} rounded-full flex items-center justify-center`}>
-                    <paymentModal.selectedTierInfo.icon className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="text-left">
-                    <CardTitle className="text-lg">{paymentModal.selectedTierInfo.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {paymentModal.action === 'upgrade' ? 'Upgrade' : 'Registration'} & Payment
-                    </p>
-                  </div>
-                </div>
+          <div className="relative w-full max-w-md max-h-[90vh] overflow-auto">
+            <Card className="bg-white shadow-2xl border-0">
+              {/* Close Button - Top Right Corner */}
+              <div className="absolute top-4 right-4 z-20">
                 <Button
                   onClick={() => setPaymentModal({ isOpen: false, action: 'register' })}
                   variant="ghost"
                   size="sm"
-                  className="p-1 h-8 w-8 rounded-full"
+                  className="h-10 w-10 rounded-full bg-white/90 hover:bg-white text-gray-700 hover:text-gray-900 border border-gray-300 hover:border-gray-500 shadow-lg transition-all duration-200"
+                  aria-label="Close payment modal"
                 >
                   ✕
                 </Button>
               </div>
-            </CardHeader>
 
-            <CardContent className="space-y-6">
-              {/* Package Details */}
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-lg">Package Details</h3>
-                  <Badge className={`${paymentModal.selectedTierInfo.color} text-white`}>
-                    {paymentModal.selectedTierInfo.badge}
-                  </Badge>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center text-sm">
-                    <span>Plan:</span>
-                    <span className="font-medium">{paymentModal.selectedTierInfo.name}</span>
+              <CardHeader className="text-center pb-4 pt-6">
+                <div className="flex items-center gap-3 justify-center mb-2">
+                  <div className={`w-12 h-12 ${paymentModal.selectedTierInfo.color} rounded-full flex items-center justify-center shadow-lg`}>
+                    <paymentModal.selectedTierInfo.icon className="w-7 h-7 text-white" />
                   </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span>Price:</span>
-                    <span className="font-bold text-lg text-green-600">
-                      {formatPrice(paymentModal.selectedTierInfo.price.usd, selectedCurrency)}/month
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs text-muted-foreground">
-                    <span>Equivalent:</span>
-                    {selectedCurrency === 'KES' ?
-                      <span>{formatPrice(paymentModal.selectedTierInfo.price.usd, 'USD')}</span> :
-                      <span>{formatPrice(paymentModal.selectedTierInfo.price.usd, 'KES')}</span>
-                    }
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t">
-                  <p className="text-sm font-medium mb-2">Features Included:</p>
-                  <ul className="space-y-1">
-                    {paymentModal.selectedTierInfo.features.slice(0, 3).map((feature, index) => (
-                      <li key={index} className="flex items-center gap-2 text-xs">
-                        <Check className="w-3 h-3 text-green-500" />
-                        {feature}
-                      </li>
-                    ))}
-                    {paymentModal.selectedTierInfo.features.length > 3 && (
-                      <li className="text-xs text-muted-foreground pl-5">
-                        +{paymentModal.selectedTierInfo.features.length - 3} more features
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              </div>
-
-              {/* Payment Method Selection */}
-              <div>
-                <h4 className="font-medium mb-3">Choose Payment Method</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    variant={selectedPaymentMethod === 'mpesa' ? 'default' : 'outline'}
-                    onClick={() => setSelectedPaymentMethod('mpesa')}
-                    className="flex items-center gap-2 justify-center h-12"
-                  >
-                    <Phone className="w-4 h-4" />
-                    M-Pesa
-                  </Button>
-                  <Button
-                    variant={selectedPaymentMethod === 'card' ? 'default' : 'outline'}
-                    onClick={() => setSelectedPaymentMethod('card')}
-                    className="flex items-center gap-2 justify-center h-12"
-                  >
-                    <Shield className="w-4 h-4" />
-                    Card
-                  </Button>
-                  <Button
-                    variant={selectedPaymentMethod === 'apple_pay' ? 'default' : 'outline'}
-                    onClick={() => setSelectedPaymentMethod('apple_pay')}
-                    className="flex items-center gap-2 justify-center h-12 text-sm"
-                  >
-                    Apple Pay
-                  </Button>
-                  <Button
-                    variant={selectedPaymentMethod === 'google_pay' ? 'default' : 'outline'}
-                    onClick={() => setSelectedPaymentMethod('google_pay')}
-                    className="flex items-center gap-2 justify-center h-12 text-sm"
-                  >
-                    Google Pay
-                  </Button>
-                </div>
-
-                {/* Phone Number Input for M-Pesa */}
-                {selectedPaymentMethod === 'mpesa' && (
-                  <div className="mt-4">
-                    <label className="text-sm font-medium mb-2 block">
-                      M-Pesa Phone Number
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="+254712345678"
-                      className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      value={phoneNumber}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Enter your M-Pesa registered number
+                  <div className="text-left">
+                    <CardTitle className="text-xl font-bold">{paymentModal.selectedTierInfo.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {paymentModal.action === 'upgrade' ? 'Plan Upgrade' : 'New Subscription'} & Payment
                     </p>
                   </div>
-                )}
-              </div>
+                </div>
+              </CardHeader>
 
-              {/* IntaSend Payment Button */}
-              <div className="space-y-4">
-                <Alert>
-                  <Phone className="h-4 w-4" />
-                  <AlertDescription>
-                    {selectedPaymentMethod === 'mpesa' ? (
-                      'You\'ll receive an M-Pesa STK push notification. Accept the payment on your phone to complete the transaction.'
-                    ) : (
-                      'You\'ll be redirected to a secure payment page. Complete your payment to activate the subscription.'
-                    )}
-                  </AlertDescription>
-                </Alert>
+              <CardContent className="space-y-6">
+                {/* Package Details */}
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-lg">Package Details</h3>
+                    <Badge className={`${paymentModal.selectedTierInfo.color} text-white`}>
+                      {paymentModal.selectedTierInfo.badge}
+                    </Badge>
+                  </div>
 
-                <Button
-                  className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-                  disabled={selectedPaymentMethod === 'mpesa' && !phoneNumber}
-                  onClick={async () => {
-                    await handleIntaSendPayment();
-                  }}
-                >
-                  <Shield className="w-5 h-5 mr-2" />
-                  Pay {formatPrice(paymentModal.selectedTierInfo.price.usd, selectedCurrency)} - Complete {paymentModal.action === 'upgrade' ? 'Upgrade' : 'Registration'}
-                </Button>
-              </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span>Plan:</span>
+                      <span className="font-medium">{paymentModal.selectedTierInfo.name}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span>Price:</span>
+                      <span className="font-bold text-lg text-green-600">
+                        {formatPrice(paymentModal.selectedTierInfo.price.usd, selectedCurrency)}/month
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-muted-foreground">
+                      <span>Equivalent:</span>
+                      {selectedCurrency === 'KES' ?
+                        <span>{formatPrice(paymentModal.selectedTierInfo.price.usd, 'USD')}</span> :
+                        <span>{formatPrice(paymentModal.selectedTierInfo.price.usd, 'KES')}</span>
+                      }
+                    </div>
+                  </div>
 
-              <div className="text-center text-xs text-muted-foreground">
-                <p>🔒 Secured by IntaSend | All transactions are protected</p>
-                <p className="mt-1">📱 Instant access after payment confirmation</p>
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="mt-4 pt-3 border-t">
+                    <p className="text-sm font-medium mb-2">Features Included:</p>
+                    <ul className="space-y-1">
+                      {paymentModal.selectedTierInfo.features.slice(0, 3).map((feature, index) => (
+                        <li key={index} className="flex items-center gap-2 text-xs">
+                          <Check className="w-3 h-3 text-green-500" />
+                          {feature}
+                        </li>
+                      ))}
+                      {paymentModal.selectedTierInfo.features.length > 3 && (
+                        <li className="text-xs text-muted-foreground pl-5">
+                          +{paymentModal.selectedTierInfo.features.length - 3} more features
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Payment Method Selection */}
+                <div>
+                  <h4 className="font-medium mb-3">Choose Payment Method</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      variant={selectedPaymentMethod === 'mpesa' ? 'default' : 'outline'}
+                      onClick={() => setSelectedPaymentMethod('mpesa')}
+                      className="flex items-center gap-2 justify-center h-12"
+                    >
+                      <Phone className="w-4 h-4" />
+                      M-Pesa
+                    </Button>
+                    <Button
+                      variant={selectedPaymentMethod === 'card' ? 'default' : 'outline'}
+                      onClick={() => setSelectedPaymentMethod('card')}
+                      className="flex items-center gap-2 justify-center h-12"
+                    >
+                      <Shield className="w-4 h-4" />
+                      Card
+                    </Button>
+                    <Button
+                      variant={selectedPaymentMethod === 'apple_pay' ? 'default' : 'outline'}
+                      onClick={() => setSelectedPaymentMethod('apple_pay')}
+                      className="flex items-center gap-2 justify-center h-12 text-sm"
+                    >
+                      Apple Pay
+                    </Button>
+                    <Button
+                      variant={selectedPaymentMethod === 'google_pay' ? 'default' : 'outline'}
+                      onClick={() => setSelectedPaymentMethod('google_pay')}
+                      className="flex items-center gap-2 justify-center h-12 text-sm"
+                    >
+                      Google Pay
+                    </Button>
+                  </div>
+
+                  {/* Phone Number Input for M-Pesa */}
+                  {selectedPaymentMethod === 'mpesa' && (
+                    <div className="mt-4">
+                      <label className="text-sm font-medium mb-2 block">
+                        M-Pesa Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="+254712345678"
+                        className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        value={phoneNumber}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Enter your M-Pesa registered number
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* IntaSend Payment Button */}
+                <div className="space-y-4">
+                  <Alert>
+                    <Phone className="h-4 w-4" />
+                    <AlertDescription>
+                      {selectedPaymentMethod === 'mpesa' ? (
+                        'You\'ll receive an M-Pesa STK push notification. Accept the payment on your phone to complete the transaction.'
+                      ) : (
+                        'You\'ll be redirected to a secure payment page. Complete your payment to activate the subscription.'
+                      )}
+                    </AlertDescription>
+                  </Alert>
+
+                  <Button
+                    className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                    disabled={selectedPaymentMethod === 'mpesa' && !phoneNumber}
+                    onClick={async () => {
+                      await handleIntaSendPayment();
+                    }}
+                  >
+                    <Shield className="w-5 h-5 mr-2" />
+                    Pay {formatPrice(paymentModal.selectedTierInfo.price.usd, selectedCurrency)} - Complete {paymentModal.action === 'upgrade' ? 'Upgrade' : 'Registration'}
+                  </Button>
+                </div>
+
+                <div className="text-center text-xs text-muted-foreground">
+                  <p>🔒 Secured by IntaSend | All transactions are protected</p>
+                  <p className="mt-1">📱 Instant access after payment confirmation</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
     </div>
