@@ -6,16 +6,20 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  Heart, 
-  Plus, 
-  TrendingUp, 
-  Calendar, 
-  Download, 
-  Share2, 
-  AlertTriangle, 
-  CheckCircle, 
-  Users, 
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Tables, Enums } from '@/integrations/supabase/types';
+import {
+  Heart,
+  Plus,
+  TrendingUp,
+  Calendar,
+  Download,
+  Share2,
+  AlertTriangle,
+  CheckCircle,
+  Users,
   Globe,
   Moon,
   Sun,
@@ -23,29 +27,28 @@ import {
   X,
   Settings,
   LogOut,
-  Bell
+  Bell,
+  Loader2
 } from 'lucide-react';
 
+type Symptom = Tables<'symptoms'> & { severity: number; pending?: boolean }; // Assuming severity is added to symptoms table
+type UserProfile = Tables<'users'>;
+type SubscriptionTier = Enums<'subscription_tier'>;
+
 const Dashboard = () => {
-  const { user: authUser } = useAuth();
-  const [user, setUser] = useState({
-    name: authUser?.user_metadata?.full_name || 'User',
-    email: authUser?.email || '',
-    tier: 'health_champion',
-    joinDate: '2024-01-15',
-    educationCompleted: true
-  });
-  
-  const [symptoms, setSymptoms] = useState([]);
+  const { user: authUser, signOut } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const [newSymptom, setNewSymptom] = useState('');
   const [severity, setSeverity] = useState(1);
-  const [aiInsights, setAiInsights] = useState([]);
+  const [aiInsights, setAiInsights] = useState([]); // Still using mock for now
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showLogForm, setShowLogForm] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  const tierFeatures = {
+  const tierFeatures: Record<SubscriptionTier, { name: string; maxHistory: number; features: string[]; color: string }> = {
     community_advocate: {
       name: 'Community Advocate',
       maxHistory: 30,
@@ -53,33 +56,87 @@ const Dashboard = () => {
       color: 'bg-blue-500'
     },
     health_champion: {
-      name: 'Health Champion', 
+      name: 'Health Champion',
       maxHistory: -1,
       features: ['Advanced AI', 'Unlimited history', 'Weekly reports', 'Data export'],
       color: 'bg-green-500'
     },
     global_advocate: {
       name: 'Global Advocate',
-      maxHistory: -1, 
+      maxHistory: -1,
       features: ['All features', 'Family tracking', 'Expert consultations', 'Research participation'],
       color: 'bg-purple-500'
     }
   };
 
-  useEffect(() => {
-    // Update user data when authUser changes
-    if (authUser) {
-      setUser(prev => ({
-        ...prev,
-        name: authUser.user_metadata?.full_name || 'User',
-        email: authUser.email || ''
-      }));
+  // Fetch user profile
+  const { data: userProfile, isLoading: isLoadingUserProfile, error: userProfileError } = useQuery<UserProfile>({
+    queryKey: ['userProfile', authUser?.id],
+    queryFn: async () => {
+      if (!authUser?.id) throw new Error('User not authenticated');
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!authUser?.id,
+  });
+
+  // Fetch symptoms
+  const { data: symptoms = [], isLoading: isLoadingSymptoms, error: symptomsError } = useQuery<Symptom[]>({
+    queryKey: ['symptoms', authUser?.id],
+    queryFn: async () => {
+      if (!authUser?.id) throw new Error('User not authenticated');
+      const { data, error } = await supabase
+        .from('symptoms')
+        .select('*')
+        .eq('user_id', authUser.id)
+        .order('timestamp', { ascending: false });
+      if (error) throw error;
+      return data as Symptom[];
+    },
+    enabled: !!authUser?.id,
+  });
+
+  // Mutation for logging a new symptom
+  const logSymptomMutation = useMutation({
+    mutationFn: async (symptomData: { symptom: string; severity: number; timestamp: string; user_id: string }) => {
+      const { data, error } = await supabase
+        .from('symptoms')
+        .insert([{
+          symptom: symptomData.symptom,
+          severity: symptomData.severity,
+          timestamp: symptomData.timestamp,
+          user_id: symptomData.user_id,
+        }])
+        .select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['symptoms'] });
+      // TODO: Trigger AI insights update
+    },
+    onError: (error: any) => { // Explicitly type error as any for now to access .message and .details
+      console.error('Failed to log symptom:', error.message || error);
+      if (error.details) {
+        console.error('Supabase error details:', error.details);
+      }
+      // Handle offline storage if mutation fails due to network
+      const symptomData = {
+        symptom: newSymptom,
+        severity: severity,
+        timestamp: new Date().toISOString(),
+        user_id: authUser?.id || ''
+      };
+      storeOfflineSymptom(symptomData);
     }
-    
-    // Load user data and symptoms
-    loadUserData();
-    loadSymptoms();
-    
+  });
+
+  useEffect(() => {
     // Dark mode
     const isDark = localStorage.getItem('theme') === 'dark';
     setIsDarkMode(isDark);
@@ -88,7 +145,7 @@ const Dashboard = () => {
     // Online/offline detection
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
@@ -96,24 +153,10 @@ const Dashboard = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [authUser]);
+  }, []);
 
-  const loadUserData = async () => {
-    // TODO: Load from Supabase
-    // For now using mock data
-  };
-
-  const loadSymptoms = async () => {
-    // TODO: Load from Supabase
-    // Mock data for demonstration
-    const mockSymptoms = [
-      { id: 1, symptom: 'Headache', severity: 3, timestamp: '2024-01-20T10:00:00Z' },
-      { id: 2, symptom: 'Fatigue', severity: 2, timestamp: '2024-01-19T14:30:00Z' },
-      { id: 3, symptom: 'Nausea', severity: 1, timestamp: '2024-01-18T09:15:00Z' }
-    ];
-    setSymptoms(mockSymptoms);
-    
-    // Mock AI insights
+  // Mock AI insights for now
+  useEffect(() => {
     setAiInsights([
       {
         type: 'pattern',
@@ -126,36 +169,21 @@ const Dashboard = () => {
         severity: 'high'
       }
     ]);
-  };
+  }, [symptoms]); // Re-evaluate AI insights when symptoms change
 
-  const logSymptom = async () => {
-    if (!newSymptom.trim()) return;
+  const handleLogSymptom = async () => {
+    if (!newSymptom.trim() || !authUser?.id) return;
 
     const symptomData = {
       symptom: newSymptom,
       severity: severity,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      user_id: authUser.id,
     };
 
     if (isOnline) {
-      try {
-        // TODO: API call to log symptom
-        // const response = await fetch('/api/log_symptom', { ... });
-        
-        // Add to local state
-        const newSymptomEntry = {
-          id: Date.now(),
-          ...symptomData
-        };
-        setSymptoms(prev => [newSymptomEntry, ...prev]);
-        
-      } catch (error) {
-        console.error('Failed to log symptom:', error);
-        // Store offline for later sync
-        storeOfflineSymptom(symptomData);
-      }
+      logSymptomMutation.mutate(symptomData);
     } else {
-      // Store offline
       storeOfflineSymptom(symptomData);
     }
 
@@ -164,18 +192,13 @@ const Dashboard = () => {
     setShowLogForm(false);
   };
 
-  const storeOfflineSymptom = (symptomData) => {
+  const storeOfflineSymptom = (symptomData: Omit<Symptom, 'id'>) => { // id is not available for offline symptoms
     const offline = JSON.parse(localStorage.getItem('offlineSymptoms') || '[]');
     offline.push(symptomData);
     localStorage.setItem('offlineSymptoms', JSON.stringify(offline));
-    
-    // Add to local state with pending flag
-    const newSymptomEntry = {
-      id: Date.now(),
-      ...symptomData,
-      pending: true
-    };
-    setSymptoms(prev => [newSymptomEntry, ...prev]);
+
+    // Add to local state with pending flag (React Query will re-fetch later)
+    // For now, we'll just let React Query handle the eventual refetch
   };
 
   const toggleDarkMode = () => {
@@ -186,7 +209,7 @@ const Dashboard = () => {
   };
 
   const exportData = () => {
-    if (user.tier === 'community_advocate') {
+    if (userProfile?.tier === 'community_advocate') {
       alert('Data export is available for Health Champion and Global Advocate tiers only.');
       return;
     }
@@ -211,7 +234,29 @@ const Dashboard = () => {
     URL.revokeObjectURL(url);
   };
 
-  const currentTier = tierFeatures[user.tier];
+  const currentTier = tierFeatures[userProfile?.tier || 'community_advocate']; // Default to community_advocate
+
+  if (isLoadingUserProfile || isLoadingSymptoms) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (userProfileError || symptomsError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 mx-auto mb-4 text-destructive" />
+          <p className="text-muted-foreground">Error loading data. Please try again.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -253,13 +298,13 @@ const Dashboard = () => {
               >
                 {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
-              <Button variant="ghost" size="sm" className="p-2">
+              <Button variant="ghost" size="sm" className="p-2" onClick={() => alert('Notifications not yet implemented!')}>
                 <Bell className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="sm" className="p-2">
+              <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/profile')}>
                 <Settings className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="sm" className="p-2">
+              <Button variant="ghost" size="sm" className="p-2" onClick={signOut}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
@@ -293,10 +338,10 @@ const Dashboard = () => {
                     {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />} Theme
                   </Button>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={() => navigate('/profile')}>
                       <Settings className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={signOut}>
                       <LogOut className="h-4 w-4" />
                     </Button>
                   </div>
@@ -312,7 +357,7 @@ const Dashboard = () => {
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold mb-2">Welcome back, {user.name}! 👋</h1>
+              <h1 className="text-3xl font-bold mb-2">Welcome back, {userProfile?.full_name || authUser?.email || 'User'}! 👋</h1>
               <p className="text-muted-foreground">
                 Track your health journey and contribute to global wellness through SDG 3.
               </p>
@@ -415,7 +460,7 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between">
                   <CardTitle>Recent Symptoms</CardTitle>
                   <div className="flex gap-2">
-                    {user.tier !== 'community_advocate' && (
+                    {userProfile?.tier !== 'community_advocate' && (
                       <Button 
                         onClick={exportData}
                         variant="outline" 
@@ -497,7 +542,7 @@ const Dashboard = () => {
                     ))}
                   </div>
 
-                  {user.tier === 'community_advocate' && (
+                  {userProfile?.tier === 'community_advocate' && (
                     <Button className="w-full mt-4" variant="outline">
                       Upgrade Plan
                     </Button>
@@ -560,15 +605,15 @@ const Dashboard = () => {
                     <Plus className="h-4 w-4 mr-2" />
                     Log Symptom
                   </Button>
-                  <Button variant="outline" className="w-full justify-start">
+                  <Button variant="outline" className="w-full justify-start" onClick={() => alert('Calendar view not yet implemented!')}>
                     <Calendar className="h-4 w-4 mr-2" />
                     View Calendar
                   </Button>
-                  <Button variant="outline" className="w-full justify-start">
+                  <Button variant="outline" className="w-full justify-start" onClick={() => alert('Family tracking not yet implemented!')}>
                     <Users className="h-4 w-4 mr-2" />
                     Family Tracking
                   </Button>
-                  {user.tier !== 'community_advocate' && (
+                  {userProfile?.tier !== 'community_advocate' && (
                     <Button 
                       onClick={exportData}
                       variant="outline" 
@@ -627,6 +672,7 @@ const Dashboard = () => {
                   value={severity}
                   onChange={(e) => setSeverity(parseInt(e.target.value))}
                   className="w-full"
+                  aria-label="Symptom Severity"
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Mild</span>
@@ -644,7 +690,7 @@ const Dashboard = () => {
                   Cancel
                 </Button>
                 <Button 
-                  onClick={logSymptom}
+                  onClick={handleLogSymptom}
                   disabled={!newSymptom.trim()}
                   className="flex-1 health-button"
                 >

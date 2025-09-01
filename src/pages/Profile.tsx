@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { 
   User, 
   Heart, 
@@ -26,18 +28,29 @@ import {
   LogOut
 } from 'lucide-react';
 
+// Declare IntaSend on the Window interface
+declare global {
+  interface Window {
+    IntaSend: any; // Replace 'any' with a more specific type if available
+  }
+}
+
+const INTASEND_PUBLISHABLE_KEY = "ISPubKey_test_ebbf5187-cad7-4cb6-92aa-03a2b738ce79"; // TODO: Replace with actual key from environment variables
+
 const Profile = () => {
+  const { user: authUser, signOut } = useAuth();
+  const navigate = useNavigate();
   const [user, setUser] = useState({
-    id: '12345',
-    email: 'john@example.com',
-    username: 'johndoe',
-    fullName: 'John Doe',
-    tier: 'health_champion',
-    educationCompleted: true,
-    dataSharingConsent: true,
-    impactNotifications: true,
-    createdAt: '2024-01-15T10:00:00Z',
-    subscriptionEnd: '2024-02-15T10:00:00Z'
+    id: authUser?.id || '12345',
+    email: authUser?.email || 'john@example.com',
+    username: authUser?.user_metadata?.username || 'johndoe',
+    fullName: authUser?.user_metadata?.full_name || 'John Doe',
+    tier: (authUser?.user_metadata?.tier || 'community_advocate') as 'community_advocate' | 'health_champion' | 'global_advocate',
+    educationCompleted: authUser?.user_metadata?.education_completed || false,
+    dataSharingConsent: authUser?.user_metadata?.data_sharing_consent || false,
+    impactNotifications: authUser?.user_metadata?.impact_notifications || false,
+    createdAt: authUser?.created_at || '2024-01-15T10:00:00Z',
+    subscriptionEnd: authUser?.user_metadata?.subscription_end || '2024-02-15T10:00:00Z'
   });
 
   const [isEditing, setIsEditing] = useState(false);
@@ -45,7 +58,7 @@ const Profile = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  // Removed showUpgradeModal as IntaSend button handles payment directly
 
   const tierInfo = {
     community_advocate: {
@@ -71,6 +84,9 @@ const Profile = () => {
     }
   };
 
+  const currentTier = tierInfo[user.tier];
+  const nextTier = currentTier.nextTier ? tierInfo[currentTier.nextTier] : null;
+
   const subscriptionStats = {
     totalContributions: 847,
     impactPoints: 1234,
@@ -80,6 +96,22 @@ const Profile = () => {
   };
 
   useEffect(() => {
+    if (authUser) {
+      setUser(prev => ({
+        ...prev,
+        id: authUser.id,
+        email: authUser.email || '',
+        username: authUser.user_metadata?.username || prev.username,
+        fullName: authUser.user_metadata?.full_name || prev.fullName,
+        tier: (authUser.user_metadata?.tier || 'community_advocate') as 'community_advocate' | 'health_champion' | 'global_advocate',
+        educationCompleted: authUser.user_metadata?.education_completed || prev.educationCompleted,
+        dataSharingConsent: authUser.user_metadata?.data_sharing_consent || prev.dataSharingConsent,
+        impactNotifications: authUser.user_metadata?.impact_notifications || prev.impactNotifications,
+        createdAt: authUser.created_at || prev.createdAt,
+        subscriptionEnd: authUser.user_metadata?.subscription_end || prev.subscriptionEnd
+      }));
+    }
+    
     // Load user data
     loadUserProfile();
     
@@ -87,7 +119,31 @@ const Profile = () => {
     const isDark = localStorage.getItem('theme') === 'dark';
     setIsDarkMode(isDark);
     document.documentElement.classList.toggle('dark', isDark);
-  }, []);
+
+    // Initialize IntaSend
+    if (window.IntaSend && INTASEND_PUBLISHABLE_KEY) { // Simplified check
+      new window.IntaSend({
+        publicAPIKey: INTASEND_PUBLISHABLE_KEY,
+        live: false, // Set to true for live environment
+      })
+      .on("COMPLETE", (results) => {
+        console.log("IntaSend Payment Complete:", results);
+        alert(`Payment for ${nextTier?.name} successful! Transaction ID: ${results.tracking_id}`);
+        // TODO: Update user tier in Supabase and local state
+        // For demo, just update locally
+        if (nextTier) {
+          setUser(prev => ({ ...prev, tier: nextTier.name.toLowerCase().replace(' ', '_') as 'community_advocate' | 'health_champion' | 'global_advocate' }));
+        }
+      })
+      .on("FAILED", (results) => {
+        console.log("IntaSend Payment Failed:", results);
+        alert(`Payment failed: ${results.message || 'Unknown error'}`);
+      })
+      .on("IN-PROGRESS", (results) => {
+        console.log("IntaSend Payment In Progress:", results);
+      });
+    }
+  }, [authUser, nextTier, user.tier]); // Added user.tier to dependency array
 
   const loadUserProfile = async () => {
     // TODO: Load from Supabase
@@ -110,18 +166,21 @@ const Profile = () => {
     }
   };
 
-  const upgradeTier = async (newTier) => {
+  // The upgradeTier function is no longer directly called by a button,
+  // as IntaSend handles the payment initiation. The tier update logic
+  // is now within the IntaSend COMPLETE event handler.
+  // Keeping it here as a placeholder if direct upgrade logic is needed elsewhere.
+  const upgradeTier = async (newTier: 'community_advocate' | 'health_champion' | 'global_advocate') => {
     try {
-      // TODO: Call upgrade API
+      // TODO: Call upgrade API (e.g., to update Supabase backend)
       // const response = await fetch('/api/upgrade', { ... });
       
       // For demo, just update locally
       setUser(prev => ({ ...prev, tier: newTier }));
-      setShowUpgradeModal(false);
-      alert('Tier upgraded successfully!');
+      alert('Tier updated successfully!');
     } catch (error) {
-      console.error('Failed to upgrade tier:', error);
-      alert('Failed to upgrade tier. Please try again.');
+      console.error('Failed to update tier:', error);
+      alert('Failed to update tier. Please try again.');
     }
   };
 
@@ -186,9 +245,6 @@ Community Rank: ${subscriptionStats.communityRank}`;
     localStorage.setItem('theme', newMode ? 'dark' : 'light');
   };
 
-  const currentTier = tierInfo[user.tier];
-  const nextTier = currentTier.nextTier ? tierInfo[currentTier.nextTier] : null;
-
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation */}
@@ -216,10 +272,10 @@ Community Rank: ${subscriptionStats.communityRank}`;
               >
                 {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
                 Dashboard
               </Button>
-              <Button variant="ghost" size="sm" className="p-2">
+              <Button variant="ghost" size="sm" className="p-2" onClick={signOut}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
@@ -248,10 +304,10 @@ Community Rank: ${subscriptionStats.communityRank}`;
                     {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />} Theme
                   </Button>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
                       Dashboard
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={signOut}>
                       <LogOut className="h-4 w-4" />
                     </Button>
                   </div>
@@ -335,6 +391,7 @@ Community Rank: ${subscriptionStats.communityRank}`;
                         value={editData.fullName}
                         onChange={(e) => setEditData(prev => ({ ...prev, fullName: e.target.value }))}
                         className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        aria-label="Full Name"
                       />
                     ) : (
                       <div className="text-sm">{user.fullName}</div>
@@ -349,6 +406,7 @@ Community Rank: ${subscriptionStats.communityRank}`;
                         value={editData.username}
                         onChange={(e) => setEditData(prev => ({ ...prev, username: e.target.value }))}
                         className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        aria-label="Username"
                       />
                     ) : (
                       <div className="text-sm">@{user.username}</div>
@@ -503,8 +561,13 @@ Community Rank: ${subscriptionStats.communityRank}`;
 
                   {nextTier && (
                     <Button 
-                      onClick={() => setShowUpgradeModal(true)}
-                      className="w-full mt-4 health-button"
+                      className="w-full mt-4 health-button intaSendPayButton"
+                      data-amount={nextTier.price === 'Free' ? '0' : nextTier.price.replace('$', '').replace('/month', '')}
+                      data-currency="KES" // Assuming KES as per documentation example, adjust if needed
+                      data-email={user.email}
+                      data-first_name={user.fullName.split(' ')[0]}
+                      data-last_name={user.fullName.split(' ').slice(1).join(' ')}
+                      data-api_ref={`upgrade_${nextTier.id}_${user.id}_${Date.now()}`}
                     >
                       Upgrade to {nextTier.name}
                       <ArrowRight className="h-4 w-4 ml-2" />
@@ -596,64 +659,6 @@ Community Rank: ${subscriptionStats.communityRank}`;
         </div>
       </div>
 
-      {/* Upgrade Modal */}
-      {showUpgradeModal && nextTier && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Upgrade to {nextTier.name}</CardTitle>
-                <Button 
-                  onClick={() => setShowUpgradeModal(false)}
-                  variant="ghost"
-                  size="sm"
-                  className="p-1"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <CardDescription>
-                Unlock advanced features and increase your global health impact
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-primary">{nextTier.price}</div>
-                  <div className="text-sm text-muted-foreground">per month</div>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">You'll get:</div>
-                  {nextTier.features.map((feature, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm">
-                      <CheckCircle className="h-3 w-3 text-green-500" />
-                      {feature}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                <Button 
-                  onClick={() => setShowUpgradeModal(false)}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={() => upgradeTier(nextTier.name.toLowerCase().replace(' ', '_'))}
-                  className="flex-1 health-button"
-                >
-                  Upgrade Now
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -696,6 +701,7 @@ Community Rank: ${subscriptionStats.communityRank}`;
                   type="text" 
                   className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-destructive"
                   placeholder="DELETE"
+                  aria-label="Confirm delete by typing DELETE"
                 />
               </div>
 
