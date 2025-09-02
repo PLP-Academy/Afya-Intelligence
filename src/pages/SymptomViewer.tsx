@@ -20,7 +20,7 @@ const SymptomViewer = () => {
       try {
         const { data, error } = await getSymptoms();
         if (error) {
-          throw new Error(error.message);
+          throw new Error(typeof error === 'string' ? error : error.message || 'Unknown error');
         }
         setSymptoms(data);
       } catch (err) {

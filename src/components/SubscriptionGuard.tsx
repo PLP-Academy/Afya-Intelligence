@@ -111,13 +111,10 @@ const SubscriptionGuard = ({
         const targetPrice = prices[requiredTier as keyof typeof prices] || 150;
 
         const paymentResult = await initiateSTKPush(
-          targetPrice,
           phoneNumber,
+          targetPrice,
           authUser.id,
-          requiredTier,
-          profile.email,
-          profile.full_name?.split(' ')[0] || 'User',
-          profile.full_name?.split(' ').slice(1).join(' ') || ''
+          `Upgrade to ${requiredTier}`
         );
 
         if (paymentResult.success) {
