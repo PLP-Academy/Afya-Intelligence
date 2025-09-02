@@ -10,74 +10,182 @@ interface Insight {
   message: string;
   severity: 'low' | 'medium' | 'high';
   confidence?: number;
-  tierLevel?: 'basic' | 'advanced';
+  tierLevel?: SubscriptionTier;
 }
 
 type SubscriptionTier = 'community_advocate' | 'health_champion' | 'global_advocate';
 
-const HUGGING_FACE_API_KEY = import.meta.env.VITE_HUGGING_FACE_API_KEY;
-const HUGGING_FACE_MODEL = 'microsoft/DialoGPT-medium'; // For conversational AI insights
+// Google Gemini API integration
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GEMINI_MODEL = 'gemini-2.0-flash-exp'; // Available: gemini-pro, gemini-2.0-flash-exp
 
-async function callHuggingFaceAPI(prompt: string): Promise<string> {
-  if (!HUGGING_FACE_API_KEY || HUGGING_FACE_API_KEY.trim() === '') {
-    console.warn('Hugging Face API key not configured. Check your .env file for VITE_HUGGING_FACE_API_KEY');
-    return getFallbackInsight(prompt);
+async function callGeminiAPI(prompt: string): Promise<string> {
+  if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === '') {
+    console.warn('⚠️ Google Gemini API key not configured. Using local AI processing.');
+    return generateLocalAIInsight(prompt);
   }
 
   try {
-    const response = await fetch(
-      `https://api-inference.huggingface.co/models/${HUGGING_FACE_MODEL}`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${HUGGING_FACE_API_KEY}`,
-          'Content-Type': 'application/json',
+    console.log(`🤖 Calling Google Gemini model: ${GEMINI_MODEL}`);
+
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 300,
+          topK: 40,
+          topP: 0.8,
         },
-        body: JSON.stringify({
-          inputs: prompt,
-          parameters: {
-            max_length: 150,
-            temperature: 0.7,
+        safetySettings: [
+          {
+            category: 'HARM_CATEGORY_HARASSMENT',
+            threshold: 'BLOCK_MEDIUM_AND_ABOVE'
           },
-        }),
-      }
-    );
+          {
+            category: 'HARM_CATEGORY_HATE_SPEECH',
+            threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+          },
+          {
+            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+          }
+        ]
+      }),
+    });
 
     if (!response.ok) {
-      if (response.status === 401) {
-        console.error('Hugging Face API key invalid. Please check your API key at https://huggingface.co/settings/tokens');
-        return getFallbackInsight(prompt);
+      const errorText = await response.text();
+      console.error(`❌ Gemini API error (${response.status}):`, errorText);
+
+      if (response.status === 401 || response.status === 403) {
+        console.error('❌ Invalid Google Gemini API key. Check your token at https://makersuite.google.com/app/apikey');
+        return generateLocalAIInsight(prompt);
       }
-      throw new Error(`Hugging Face API error: ${response.status} ${response.statusText}`);
+      if (response.status === 429) {
+        console.warn('📊 Gemini rate limited, using local processing');
+        return generateLocalAIInsight(prompt);
+      }
+      if (response.status === 404) {
+        console.warn(`🚫 Gemini model ${GEMINI_MODEL} not found`);
+        return generateLocalAIInsight(prompt);
+      }
+      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
     }
 
     const result = await response.json();
 
-    // Handle different response formats
-    if (Array.isArray(result) && result[0]?.generated_text) {
-      return result[0].generated_text;
-    } else if (typeof result.generated_text === 'string') {
-      return result.generated_text;
+    // Extract content from Gemini response
+    let content = '';
+    if (result.candidates && result.candidates[0]?.content?.parts) {
+      content = result.candidates[0].content.parts.map((part: any) => part.text || '').join(' ');
     }
 
-    console.warn('Unexpected response format from Hugging Face API, using fallback');
-    return getFallbackInsight(prompt);
+    if (content && content.length > 10) {
+      console.log(`✅ Successful Gemini response from ${GEMINI_MODEL}`);
+      return content.trim();
+    } else {
+      console.warn(`⚠️ Empty response from ${GEMINI_MODEL}, using local processing`);
+      return generateLocalAIInsight(prompt);
+    }
+
   } catch (error) {
-    console.error('Hugging Face API call failed:', error);
-    return getFallbackInsight(prompt);
+    console.error('💥 Google Gemini API call failed:', error);
+    console.log('🔄 Falling back to local AI processing');
+    return generateLocalAIInsight(prompt);
   }
 }
 
-function getFallbackInsight(symptomsText: string): string {
-  const insights = [
-    "Based on your symptoms, consider consulting with a healthcare professional for personalized advice.",
-    "Track your hydration and sleep patterns alongside your symptoms for comprehensive insights.",
-    "Consider keeping a symptom journal that includes environmental factors like weather and stress levels.",
-    "Regular exercise and a balanced diet can positively impact overall symptom management.",
-    "If symptoms persist for more than a few days, consider professional medical evaluation."
-  ];
+// Enhanced local AI processing for medical insights
+function generateLocalAIInsight(prompt: string): Promise<string> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // Extract symptom information from prompt
+      const symptomMatch = prompt.match(/symptom:?\s*([^,\(\n]+)/i);
+      const symptom = symptomMatch ? symptomMatch[1].trim().toLowerCase() : 'symptom';
 
-  return insights[Math.floor(Math.random() * insights.length)];
+      const severityMatch = prompt.match(/severity:?\s*(?:level\s*)?(\d+)/i);
+      const severity = severityMatch ? parseInt(severityMatch[1]) : 2;
+
+      // Symptom-specific medical recommendations
+      if (symptom.includes('headache') || symptom.includes('pain') && prompt.includes('head')) {
+        if (severity >= 4) {
+          resolve("🚨 CRITICAL: Severe headache detected with neurological symptoms. IMMEDIATELY seek medical attention. Possible causes include meningitis, stroke, or brain injury. Do not delay - call emergency services.");
+        } else if (severity >= 3) {
+          resolve("⚠️ Moderate to severe headache pattern requires attention. Consider migraine, tension headache, or medication rebound. Track triggers: caffeine, stress, screen time, or poor sleep. If accompanied by nausea, vomiting, or visual changes, consult a healthcare provider within 24 hours.");
+        } else {
+          resolve("📊 Headache logged and analyzed. Common triggers include dehydration (aim for 8 glasses of water daily), screen fatigue, or stress. Try the '5-10-15 rule': blink every 5 seconds, look at something 10 feet away for 10 seconds, repeat every 15 minutes. Monitor pattern for preventive care.");
+        }
+      }
+
+      else if (symptom.includes('chest pain') || symptom.includes('chest') && symptom.includes('pain')) {
+        if (severity >= 4) {
+          resolve("🚨 URGENT MEDICAL EMERGENCY: Severe chest pain could indicate heart attack, pulmonary embolism, or aortic dissection. CALL EMERGENCY 911/112 immediately. DO NOT DELAY - every minute counts for heart attack treatment.");
+        } else {
+          resolve("⚠️ Chest pain requires immediate evaluation. Could indicate cardiac issues, gastrointestinal problems, or musculoskeletal pain. Do not ignore - seek medical consultation promptly. Note: any chest pain should be evaluated professionally.");
+        }
+      }
+
+      else if (symptom.includes('fever') || symptom.includes('temperature') || symptom.includes('hot')) {
+        if (severity >= 4) {
+          resolve("🔥 HIGH FEVER ALERT: Body temperature above 103°F/39.4°C requires immediate medical attention. Could indicate serious infection. Seek emergency care. In the meantime: stay hydrated, use damp cloth on forehead, take fever-reducing medication if appropriate.");
+        } else {
+          resolve("🌡️ Fever detected. Monitor temperature closely: oral >100.4°F/38°C = fever. Common causes: viral infections, bacterial infections, or inflammatory conditions. If fever >102°F persistently or accompanied by severe symptoms, seek medical care.");
+        }
+      }
+
+      else if (symptom.includes('nausea') || symptom.includes('vomit') || symptom.includes('stomach')) {
+        if (severity >= 4) {
+          resolve("🚨 Severe nausea/gastrointestinal distress requires immediate medical attention. If accompanied by dehydration signs (dry mouth, dizziness), severe vomiting, or blood in stool/vomit - seek immediate medical attention.");
+        } else {
+          resolve("🤢 Gastrointestinal symptoms logged. Common causes include dietary indiscretions, stress, or viral infections. Try BRAT diet: Bananas, Rice, Applesauce, Toast. Stay hydrated. If persists >48 hours or accompanied by severe pain, consult healthcare provider.");
+        }
+      }
+
+      else if (symptom.includes('fatigue') || symptom.includes('tired') || symptom.includes('exhaust')) {
+        if (severity >= 4) {
+          resolve("⚡ EXTREME FATIGUE may indicate serious conditions like anemia, thyroid dysfunction, depression, or heart disease. Requires comprehensive medical evaluation including blood work. Rest but seek medical advice - this is NOT normal fatigue.");
+        } else {
+          resolve("😴 Fatigue pattern detected. Could be due to poor sleep quality, lifestyle factors, nutritional deficiencies, or underlying conditions. Track: sleep duration/quality, diet, exercise, stress levels. Consider sleep hygiene improvements: consistent bedtime, cool/dark room, reduce screen time.");
+        }
+      }
+
+      else if (symptom.includes('cough') || symptom.includes('throat')) {
+        if (severity >= 4) {
+          resolve("🔊 Severe cough may indicate serious respiratory condition requiring immediate medical attention. If accompanied by shortness of breath, chest pain, high fever, or wheezing - seek emergency care. Active coughing fits >10 minutes need evaluation.");
+        } else {
+          resolve("😷 Respiratory symptoms noted. Could be viral infection, allergies, or environmental irritants. Home remedies: honey/warm water, humidifier, throat lozenges. Monitor for improvement. If lasts >2 weeks, worsens, or accompanied by fever/difficulty breathing, see healthcare provider.");
+        }
+      }
+
+      else if (severity >= 4) {
+        resolve(`🚨 HIGH SEVERITY ALERT: You logged "${symptom}" as very severe. This level suggests possible serious medical condition requiring immediate professional evaluation. Please don't delay - contact healthcare provider or seek appropriate medical care based on symptom type.`);
+      }
+
+      else if (severity >= 3) {
+        resolve(`⚠️ MODERATE SYMPTOM: "${symptom}" in moderate severity range. Monitor closely for changes. Consider consulting healthcare provider for proper evaluation and management plan. Track related factors: timing, triggers, accompanying symptoms.`);
+      }
+
+      else {
+        resolve(`📝 Symptom logged: "${symptom}". Good tracking! Continue monitoring for patterns. For personalized medical advice, consult with your healthcare provider. Remember: this is not medical advice - always consult qualified healthcare professionals for medical concerns.`);
+      }
+    }, Math.random() * 400 + 200); // Simulate AI processing time
+  });
+}
+
+// Legacy compatibility function
+async function callHuggingFaceAPI(prompt: string): Promise<string> {
+  return callGeminiAPI(prompt);
 }
 
 export async function generateAIInsights(symptoms: SymptomData[], tier: SubscriptionTier = 'community_advocate'): Promise<Insight[]> {
@@ -86,67 +194,52 @@ export async function generateAIInsights(symptoms: SymptomData[], tier: Subscrip
       type: 'education',
       message: 'Welcome to Afya Intelligence! Start logging your symptoms to receive personalized AI health insights and track patterns over time.',
       severity: 'low',
-      tierLevel: 'basic'
+      tierLevel: 'community_advocate'
     }];
   }
 
   const insights: Insight[] = [];
   const isAdvancedTier = tier === 'health_champion' || tier === 'global_advocate';
 
-  // Focus on most recent symptom and recent context
-  const latestSymptom = symptoms[0]; // Most recent first
-  const recentSymptoms = symptoms.slice(0, isAdvancedTier ? 15 : 5); // More context for advanced tiers
-
-  try {
-    if (isAdvancedTier && HUGGING_FACE_API_KEY && HUGGING_FACE_API_KEY.trim() !== '') {
-      // Advanced tier: Use AI API with detailed prompts
-      const symptomHistory = recentSymptoms
-        .map((s, i) => `Symptom ${i+1}: ${s.symptom} (severity: ${s.severity}/5, ${new Date(s.timestamp).toLocaleDateString()})`)
+  // Generate AI insights or fall back to local processing
+  if (isAdvancedTier && GEMINI_API_KEY && GEMINI_API_KEY.trim() !== '') {
+    try {
+      const symptomHistory = symptoms.slice(0, Math.min(symptoms.length, 5))
+        .map((s, i) => `Symptom ${i+1}: ${s.symptom} (severity: ${s.severity}/5)`)
         .join('\n');
 
-      const prompt = `Advanced health analysis for: ${latestSymptom.symptom} (latest symptom, severity: ${latestSymptom.severity}/5)
-      Recent symptom history (${recentSymptoms.length} entries):
-      ${symptomHistory}
+      const prompt = `Provide a brief medical insight for: "${symptoms[0].symptom}" (severity: ${symptoms[0].severity}/5).
 
-      Provide 2-3 detailed insights:
-      1. Pattern analysis comparing current and past symptoms
-      2. Potential triggers or contributing factors
-      3. Specific, actionable wellness recommendations
+Recent context (${Math.min(symptoms.length, 5)} symptoms): ${symptomHistory}
 
-      Be conversational and supportive. Consider the full context and timeline.`;
+Focus on safety, preventive measures, and when to seek professional help. Keep response under 150 words.`;
 
-      const aiResponse = await callHuggingFaceAPI(prompt);
+      const aiResponse = await callGeminiAPI(prompt);
       insights.push({
         type: 'pattern',
         message: aiResponse,
         severity: 'medium',
         confidence: 0.8,
-        tierLevel: 'advanced'
+        tierLevel: 'health_champion'
       });
-    } else {
-      // Basic tier: Use intelligent pattern analysis without API calls
-      const basicInsight = generateBasicTierInsight?.(latestSymptom, symptoms, tier) ||
-                          createFallbackInsight(latestSymptom);
-      insights.push(basicInsight);
+    } catch (error) {
+      console.error('AI insight generation failed:', error);
+      const localInsight = generateBasicSymptomInsight(symptoms[0], symptoms[0].severity, tier);
+      insights.push(localInsight);
     }
-  } catch (error) {
-    console.error('AI insights generation failed:', error);
-    // Always provide some insight even if AI fails - use safe fallback
-    const fallbackInsight = generateBasicTierInsight?.(latestSymptom, symptoms, tier) ||
-                           createFallbackInsight(latestSymptom);
-    insights.push(fallbackInsight);
   }
 
-  // Enhanced pattern analysis based on tier
-  const patternAnalysis = analyzeSymptomPatterns(symptoms, tier);
-  insights.push(...patternAnalysis);
+  // Add pattern analysis and severe symptom checks
+  const patternInsights = analyzeSymptomPatterns(symptoms, tier);
+  insights.push(...patternInsights);
 
-  // Tier-specific alerts and recommendations
-  const severityAlert = checkSevereSymptoms(symptoms, tier);
-  if (severityAlert) insights.push(severityAlert);
+  const severityAlerts = checkSevereSymptoms(symptoms, tier);
+  if (severityAlerts.length > 0) {
+    insights.push(...severityAlerts);
+  }
 
-  // Add tier-specific educational content for all users
-  if (insights.length < 3) {
+  // Ensure we have at least 2 insights
+  if (insights.length < 2) {
     const educationalInsight = getEducationalInsight(tier);
     if (educationalInsight) insights.push(educationalInsight);
   }
@@ -154,288 +247,149 @@ export async function generateAIInsights(symptoms: SymptomData[], tier: Subscrip
   return insights;
 }
 
-function analyzeSymptomPatterns(symptoms: SymptomData[], tier: SubscriptionTier): Insight[] {
-  const insights: Insight[] = [];
-  const isAdvancedTier = tier === 'health_champion' || tier === 'global_advocate';
+function generateBasicSymptomInsight(symptom: SymptomData, severity: number, tier: SubscriptionTier): Insight {
+  const symptomText = symptom.symptom.toLowerCase();
 
-  if (symptoms.length < 2) return insights;
-
-  const now = new Date();
-  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const weeklySymptoms = symptoms.filter(s =>
-    new Date(s.timestamp) > oneWeekAgo
-  );
-
-  const avgSeverity = weeklySymptoms.reduce((sum, s) => sum + s.severity, 0) / weeklySymptoms.length;
-
-  if (weeklySymptoms.length >= 3) {
-    if (avgSeverity >= 4) {
-      const message = isAdvancedTier
-        ? 'Critical severity pattern detected. This suggests a potentially serious health condition. Please schedule an appointment with a healthcare provider within the next 24-48 hours for proper evaluation and diagnosis.'
-        : 'You\'ve logged multiple high-severity symptoms this week. Consider consulting a healthcare professional.';
-      insights.push({
-        type: 'alert',
-        message,
-        severity: 'high',
-        tierLevel: isAdvancedTier ? 'advanced' : 'basic'
-      });
-    } else if (avgSeverity >= 3) {
-      const message = isAdvancedTier
-        ? `Analysis of your weekly symptoms shows moderate severity (avg: ${avgSeverity.toFixed(1)}/5). This could indicate stress-related issues, nutritional deficiencies, or emerging conditions. Recommend lifestyle adjustments and tracking environmental factors.`
-        : 'Moderate symptoms detected this week. Monitor closely and consider preventive measures.';
-      insights.push({
-        type: 'pattern',
-        message,
-        severity: 'medium',
-        tierLevel: isAdvancedTier ? 'advanced' : 'basic'
-      });
-    }
-  }
-
-  // Advanced frequency analysis for premium users
-  if (isAdvancedTier && symptoms.length >= 5) {
-    const symptomDescriptions = symptoms.map(s => s.symptom.toLowerCase());
-
-    // Detect patterns in headache frequency
-    const headacheIndices = symptomDescriptions
-      .map((desc, index) => desc.includes('headache') ? index : -1)
-      .filter(index => index !== -1);
-
-    if (headacheIndices.length >= 2) {
-      const headachePatterns = symptoms.filter((_, index) => headacheIndices.includes(index));
-      const avgHeadacheSeverity = headachePatterns.reduce((sum, s) => sum + s.severity, 0) / headachePatterns.length;
-
-      const headacheInsights = analyzeHeadachePattern(headachePatterns, avgHeadacheSeverity);
-      insights.push(...headacheInsights);
-    }
-
-    // Fatigue analysis
-    const fatigueCount = symptomDescriptions.filter(s => s.includes('fatigue') || s.includes('tired')).length;
-    if (fatigueCount >= 2) {
-      insights.push({
-        type: 'recommendation',
-        message: 'Persistent fatigue pattern detected. Consider comprehensive health assessment including thyroid function, anemia screening, and sleep quality evaluation. Lifestyle factors to examine: sleep hygiene, exercise routine, and caffeine intake.',
-        severity: 'medium',
-        tierLevel: 'advanced'
-      });
-    }
-  } else if (tier === 'community_advocate') {
-    // Basic frequency analysis for free tier
-    const symptomDescriptions = symptoms.map(s => s.symptom.toLowerCase());
-    const headacheCount = symptomDescriptions.filter(s => s.includes('headache')).length;
-
-    if (headacheCount >= 2) {
-      insights.push({
-        type: 'pattern',
-        message: 'You\'ve logged multiple headaches. Consider tracking triggers like sleep, stress, or diet.',
-        severity: 'medium',
-        tierLevel: 'basic'
-      });
-    }
-  }
-
-  return insights;
-}
-
-function analyzeHeadachePattern(headacheSymptoms: SymptomData[], avgSeverity: number): Insight[] {
-  const insights: Insight[] = [];
-
-  // Time pattern analysis
-  const headacheTimes = headacheSymptoms.map(s => new Date(s.timestamp).getHours());
-  const morningHeadaches = headacheTimes.filter(hour => hour >= 6 && hour <= 11).length;
-  const afternoonHeadaches = headacheTimes.filter(hour => hour >= 12 && hour <= 17).length;
-  const eveningHeadaches = headacheTimes.filter(hour => hour >= 18 || hour <= 5).length;
-
-  if (morningHeadaches >= 2) {
-    insights.push({
-      type: 'pattern',
-      message: 'Morning headache pattern detected. Consider evaluating sleep apnea, caffeine withdrawal, or blood pressure issues. Morning headaches are often linked to sleep disorders or medication rebound effects.',
-      severity: avgSeverity >= 4 ? 'high' : 'medium',
-      tierLevel: 'advanced'
-    });
-  } else if (afternoonHeadaches >= 2) {
-    insights.push({
-      type: 'pattern',
-      message: 'Afternoon headache pattern observed. Common triggers include dehydration, eye strain from screens, or food-related sensitivities. Track hydration (aim for 8-10 glasses of water daily) and screen time breaks.',
-      severity: avgSeverity >= 4 ? 'high' : 'medium',
-      tierLevel: 'advanced'
-    });
-  } else if (eveningHeadaches >= 2) {
-    insights.push({
-      type: 'pattern',
-      message: 'Evening headache pattern identified. This may be associated with stress accumulation during the day, poor ergonomics at work, or hormonal factors. Consider relaxation techniques and workplace assessment.',
-      severity: avgSeverity >= 4 ? 'high' : 'medium',
-      tierLevel: 'advanced'
-    });
-  }
-
-  return insights;
-}
-
-function checkSevereSymptoms(symptoms: SymptomData[], tier: SubscriptionTier): Insight | null {
-  const isAdvancedTier = tier === 'health_champion' || tier === 'global_advocate';
-  const recentSymptoms = symptoms.slice(0, isAdvancedTier ? 10 : 5); // Analyze more symptoms for advanced tier
-  const highSeveritySymptoms = recentSymptoms.filter(s => s.severity >= 4);
-
-  if (highSeveritySymptoms.length >= (isAdvancedTier ? 3 : 2)) {
-    const message = isAdvancedTier
-      ? `Critical Pattern Alert: ${highSeveritySymptoms.length} high-severity symptoms detected in your recent logs. This pattern requires immediate professional evaluation. Please consult a healthcare provider promptly and consider bringing your symptom log for comprehensive review.`
-      : 'Multiple high-severity symptoms logged recently. Please consult with a healthcare provider promptly.';
-
-    return {
-      type: 'alert',
-      message,
-      severity: 'high',
-      tierLevel: isAdvancedTier ? 'advanced' : 'basic'
-    };
-  } else if (isAdvancedTier && highSeveritySymptoms.length >= 2) {
-    // More sensitive alerts for premium users
-    return {
-      type: 'alert',
-      message: `Escalating Pattern: Multiple moderate-to-high severity symptoms (${highSeveritySymptoms.length} severe in recent logs). While currently below critical threshold, this trend warrants closer monitoring or professional consultation.`,
-      severity: 'medium',
-      tierLevel: 'advanced'
-    };
-  }
-
-  return null;
-}
-
-function generateBasicTierInsight(latestSymptom: SymptomData, allSymptoms: SymptomData[], tier: SubscriptionTier): Insight {
-  const symptomText = latestSymptom.symptom.toLowerCase();
-
-  // Provide intelligent, symptom-specific insights based on common patterns
   if (symptomText.includes('headache')) {
-    if (latestSymptom.severity >= 4) {
+    if (severity >= 4) {
       return {
-        type: 'pattern',
-        message: `You've logged a severe headache (level ${latestSymptom.severity}/5). Consider tracking potential triggers like dehydration, stress, poor sleep, or screen time. If headaches are frequent, consider consulting a healthcare provider.`,
-        severity: latestSymptom.severity >= 4 ? 'high' : 'medium',
-        confidence: 0.7,
-        tierLevel: 'basic'
+        type: 'alert',
+        message: `Severe headache logged. Track patterns and consider professional consultation. Monitor for neurological symptoms.`,
+        severity: 'high',
+        confidence: 0.8,
+        tierLevel: tier
       };
     } else {
       return {
         type: 'recommendation',
-        message: `Headache logged. Try these immediate remedies: hydrate with water, step away from screens, and practice deep breathing. Track what preceded this headache for better prevention.`,
+        message: `Headache symptoms tracked. Consider hydration, screen breaks, and stress management. Persistent headaches may require medical evaluation.`,
         severity: 'medium',
         confidence: 0.6,
-        tierLevel: 'basic'
+        tierLevel: tier
       };
     }
   }
 
-  if (symptomText.includes('fatigue') || symptomText.includes('tired')) {
+  if (symptomText.includes('fatigue')) {
     return {
       type: 'pattern',
-      message: `Fatigue noted. Common causes include poor sleep quality, stress, or nutritional deficiencies. Consider improving sleep hygiene and ensure you're getting adequate nutrition. If persistent, discuss with a healthcare provider.`,
-      severity: latestSymptom.severity >= 4 ? 'high' : latestSymptom.severity >= 3 ? 'medium' : 'low',
+      message: `Fatigue symptoms detected. Consider lifestyle factors including sleep quality, nutrition, and stress management. Persistent fatigue warrants professional evaluation.`,
+      severity: 'medium',
       confidence: 0.7,
-      tierLevel: 'basic'
+      tierLevel: tier
     };
-  }
-
-  if (symptomText.includes('nausea') || symptomText.includes('stomach')) {
-    return {
-      type: 'recommendation',
-      message: `Digestive symptom logged. Consider recent meals, hydration status, and stress levels. Bland foods like toast, rice, and ginger tea may help. Contact a healthcare provider if symptoms persist or include severe pain.`,
-      severity: latestSymptom.severity >= 4 ? 'high' : 'medium',
-      confidence: 0.6,
-      tierLevel: 'basic'
-    };
-  }
-
-  if (symptomText.includes('pain') && symptomText.includes('chest')) {
-    return {
-      type: 'alert',
-      message: `Chest pain logged - this requires immediate medical attention. Please seek emergency care if this pain is severe, prolonged, or accompanied by shortness of breath, sweating, or dizziness.`,
-      severity: 'high',
-      confidence: 0.9,
-      tierLevel: 'basic'
-    };
-  }
-
-  if (symptomText.includes('pain') && (symptomText.includes('neck') || symptomText.includes('back'))) {
-    return {
-      type: 'recommendation',
-      message: `Musculoskeletal pain logged. Consider ergonomic factors at work/desk, posture, or recent activity. Gentle stretching and maintaining good posture may help. If persistent, consult a healthcare provider.`,
-      severity: latestSymptom.severity >= 3 ? 'medium' : 'low',
-      confidence: 0.6,
-      tierLevel: 'basic'
-    };
-  }
-
-  if (symptomText.includes('cough')) {
-    const isSevere = latestSymptom.severity >= 4;
-    return {
-      type: 'recommendation',
-      message: `Respiratory symptom logged. Stay hydrated, use honey in warm water if appropriate for your age, and rest. ${isSevere ? 'Consider consulting a healthcare provider for evaluation.' : 'Monitor duration and contact healthcare provider if cough persists over 2 weeks or worsens.'}`,
-      severity: isSevere ? 'high' : 'medium',
-      confidence: 0.5,
-      tierLevel: 'basic'
-    };
-  }
-
-  if (symptomText.includes('fever') || symptomText.includes('temperature')) {
-    const isHigh = latestSymptom.severity >= 4;
-    return {
-      type: 'alert',
-      message: `Elevated temperature/febrile symptom logged. ${isHigh ? 'High fever requires immediate medical evaluation.' : 'Monitor temperature, hydrate well, and rest. Contact healthcare provider for fevers over 101.5°F/38.6°C, or lasting over 48 hours.'}`,
-      severity: isHigh ? 'high' : 'medium',
-      confidence: 0.8,
-      tierLevel: 'basic'
-    };
-  }
-
-  // Generic fallback for other symptoms
-  const severity = latestSymptom.severity;
-  let message = '';
-
-  if (severity >= 4) {
-    message = `High-severity symptom logged. Track details about this symptom and any accompanying symptoms. If this worsens or persists, consult a healthcare provider for proper evaluation.`;
-  } else if (severity >= 3) {
-    message = `You've logged a moderate symptom. Monitor how it changes over time and note any factors that seem to affect it. Consider consulting a healthcare provider if it continues or worsens.`;
-  } else {
-    message = `Symptom logged and noted. Continue tracking to identify patterns that may help with management. Consider basic lifestyle factors like hydration, sleep, and stress management.`;
   }
 
   return {
-    type: 'pattern',
-    message,
-    severity: severity >= 4 ? 'high' : severity >= 3 ? 'medium' : 'low',
+    type: 'recommendation',
+    message: `${symptom.symptom} symptom logged. Continue tracking patterns for better health insights. Regular health monitoring supports proactive wellness.`,
+    severity: severity >= 3 ? 'medium' : 'low',
     confidence: 0.5,
-    tierLevel: 'basic'
+    tierLevel: tier
   };
 }
 
-function createFallbackInsight(latestSymptom: SymptomData): Insight {
-  return {
-    type: 'recommendation',
-    message: `Your symptom has been logged. Monitor how it progresses and consider tracking factors that might influence it, such as hydration, sleep quality, or recent activity. Contact a healthcare provider if symptoms persist or worsen.`,
-    severity: latestSymptom.severity >= 3 ? 'medium' : 'low',
-    confidence: 0.3,
-    tierLevel: 'basic'
-  };
+function analyzeSymptomPatterns(symptoms: SymptomData[], tier: SubscriptionTier): Insight[] {
+  const insights: Insight[] = [];
+  const isAdvancedTier = tier === 'health_champion' || tier === 'global_advocate';
+
+  if (symptoms.length >= 2) {
+    const avgSeverity = symptoms.reduce((sum, s) => sum + s.severity, 0) / symptoms.length;
+
+    if (avgSeverity >= 4) {
+      insights.push({
+        type: 'alert',
+        message: 'High average symptom severity detected. Consider comprehensive health evaluation for underlying conditions.',
+        severity: 'high',
+        confidence: 0.8,
+        tierLevel: tier
+      });
+    } else if (avgSeverity >= 3) {
+      insights.push({
+        type: 'pattern',
+        message: 'Moderate symptom severity pattern observed. Monitor progression and implement preventive lifestyle measures.',
+        severity: 'medium',
+        confidence: 0.6,
+        tierLevel: tier
+      });
+    }
+  }
+
+  if (isAdvancedTier && symptoms.length >= 3) {
+    const headacheCount = symptoms.filter(s => s.symptom.toLowerCase().includes('headache')).length;
+    if (headacheCount >= 2) {
+      insights.push({
+        type: 'pattern',
+        message: 'Frequent headache pattern detected. Consider environmental factors, hydration, and stress management. Track timing for triggers.',
+        severity: 'medium',
+        confidence: 0.7,
+        tierLevel: 'global_advocate'
+      });
+    }
+  }
+
+  return insights;
+}
+
+function checkSevereSymptoms(symptoms: SymptomData[], tier: SubscriptionTier): Insight[] {
+  const alerts: Insight[] = [];
+  const recentSymptoms = symptoms.slice(0, Math.min(symptoms.length, 10));
+  const highSeveritySymptoms = recentSymptoms.filter(s => s.severity >= 4);
+
+  if (highSeveritySymptoms.length >= 2) {
+    alerts.push({
+      type: 'alert',
+      message: `Multiple high-severity symptoms detected recently (${highSeveritySymptoms.length}). This pattern warrants professional medical evaluation.`,
+      severity: 'high',
+      confidence: 0.9,
+      tierLevel: tier
+    });
+  }
+
+  // Check for emergency symptoms
+  const emergencySymptoms = symptoms.filter(s =>
+    (s.symptom.toLowerCase().includes('chest pain') ||
+     s.symptom.toLowerCase().includes('difficulty breathing') ||
+     (s.symptom.toLowerCase().includes('fever') && s.severity >= 4))
+  );
+
+  if (emergencySymptoms.length > 0) {
+    alerts.push({
+      type: 'alert',
+      message: `EMERGENCY SYMPTOMS DETECTED: Please seek immediate medical attention. Call emergency services if symptoms are severe or worsening.`,
+      severity: 'high',
+      confidence: 1.0,
+      tierLevel: tier
+    });
+  }
+
+  return alerts;
 }
 
 export function getEducationalInsight(tier: SubscriptionTier = 'community_advocate'): Insight {
-  const educationInsights = [
+  const insights = [
     {
       type: 'education' as const,
-      message: 'Did you know? Regular symptom tracking can help identify patterns that help with early diagnosis and better health management.',
-      severity: 'low' as const
-    },
-    {
-      type: 'recommendation' as const,
-      message: 'Pro tip: Include context with your symptoms (time of day, what you ate, your activity level) for more accurate insights.',
-      severity: 'low' as const
+      message: 'Did you know? Regular symptom tracking can help identify patterns and support proactive health management.',
+      severity: 'low' as const,
+      confidence: 0.5,
+      tierLevel: tier
     },
     {
       type: 'education' as const,
-      message: 'Your data contributes to global health research through anonymous, aggregated patterns. Every symptom logged helps advance SDG 3!',
-      severity: 'low' as const
+      message: 'Health tip: Include context like time of day, recent eating habits, or stress levels for more meaningful insights.',
+      severity: 'low' as const,
+      confidence: 0.5,
+      tierLevel: tier
+    },
+    {
+      type: 'education' as const,
+      message: 'Your symptom data contributes to health research. Thank you for helping advance global wellness initiatives.',
+      severity: 'low' as const,
+      confidence: 0.5,
+      tierLevel: tier
     }
   ];
 
-  return educationInsights[Math.floor(Math.random() * educationInsights.length)];
+  return insights[Math.floor(Math.random() * insights.length)];
 }

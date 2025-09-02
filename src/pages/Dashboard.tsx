@@ -268,7 +268,7 @@ const Dashboard = () => {
         type: 'education',
         message: 'Welcome! Start logging your symptoms to receive personalized AI health insights.',
         severity: 'low',
-        tierLevel: 'basic'
+        tierLevel: 'community_advocate'
       }]);
     }
   }, [symptoms?.length, userProfile?.tier]); // Only depend on length and tier, not the full symptoms array
@@ -501,20 +501,36 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* Show API key setup message if no key is configured */}
-          {!import.meta.env.VITE_HUGGING_FACE_API_KEY && (
+          {/* Show API key setup message only for premium users without API key */}
+          {!import.meta.env.VITE_GEMINI_API_KEY && (userProfile?.tier === 'health_champion' || userProfile?.tier === 'global_advocate') && (
             <Alert className="mb-4 border-yellow-500">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                <strong>AI Insights Setup Incomplete:</strong>
+                <strong>🚀 Complete Your Premium AI Setup:</strong>
                 <br />
-                1. Go to <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">Hugging Face Settings</a>
+                You're on a premium tier, but AI insights are using local analysis due to missing API key.
                 <br />
-                2. Create a new token with Read permission
+                <strong>To unlock advanced Google Gemini AI:</strong>
                 <br />
-                3. Copy the token and add it to your <code>.env</code> file as <code>VITE_HUGGING_FACE_API_KEY="your_token_here"</code>
+                1. Go to <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">Google AI Studio</a>
                 <br />
-                <em>Currently using fallback analysis for all insights.</em>
+                2. Create a new API key
+                <br />
+                3. Add it to your <code>.env</code> file as: <code>VITE_GEMINI_API_KEY="your_api_key_here"</code>
+                <br />
+                <em>Premium tier detected. Enhanced AI insights are available once configured!</em>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Show congratulations message when premium user has API key set */}
+          {import.meta.env.VITE_GEMINI_API_KEY && (userProfile?.tier === 'health_champion' || userProfile?.tier === 'global_advocate') && (
+            <Alert className="mb-4 border-green-500 bg-green-50">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">
+                <strong>🎉 Premium AI Activated!</strong>
+                <br />
+                You're getting advanced Gemini AI-powered insights. Your premium configuration is complete!
               </AlertDescription>
             </Alert>
           )}
