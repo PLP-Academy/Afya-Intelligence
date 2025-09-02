@@ -102,7 +102,7 @@ const Dashboard = () => {
     navigate('/pricing');
   };
 
-  const tierFeatures: Record<SubscriptionTier, { name: string; maxHistory: number; features: string[]; color: string }> = {
+  const tierFeatures = {
     community_advocate: {
       name: 'Community Advocate',
       maxHistory: 30,
@@ -121,7 +121,7 @@ const Dashboard = () => {
       features: ['All features', 'Family tracking', 'Expert consultations', 'Research participation'],
       color: 'bg-purple-500'
     }
-  };
+  } as const;
 
   // Fetch user profile
   const { data: userProfile, isLoading: isLoadingUserProfile, error: userProfileError } = useQuery<UserProfile>({
@@ -227,8 +227,8 @@ const Dashboard = () => {
 
       try {
         // Use the user's subscription tier for insight generation
-        const userTier = (userProfile.tier as SubscriptionTier) || 'community_advocate';
-        const insights = await generateAIInsights([...symptoms], userTier);
+        const userTier = userProfile.tier as keyof typeof tierFeatures || 'community_advocate';
+        const insights = await generateAIInsights([...symptoms], userTier as any);
 
         setAiInsights(insights);
       } catch (error) {

@@ -41,8 +41,10 @@ export async function getSymptoms(userId?: string) {
 export async function logSymptom(symptomData: { symptom: string; severity: string; userId: string }) {
   const { data, error } = await supabase
     .from('symptoms')
-    .insert([
-      { symptom: symptomData.symptom, severity: symptomData.severity, user_id: symptomData.userId },
-    ]);
+    .insert({
+      symptom: symptomData.symptom, 
+      severity: parseInt(symptomData.severity) || null, 
+      user_id: symptomData.userId 
+    });
   return { data, error };
 }
