@@ -471,14 +471,25 @@ const Dashboard = () => {
                 Track your health journey and contribute to global wellness through SDG 3.
               </p>
             </div>
-            <Button 
-              onClick={() => setShowLogForm(true)}
-              className="health-button"
-              size="lg"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              Log Symptom
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => navigate('/family')}
+                variant="outline"
+                size="lg"
+                className="border-primary text-primary hover:bg-primary hover:text-white"
+              >
+                <Users className="h-5 w-5 mr-2" />
+                Family Tracking
+              </Button>
+              <Button
+                onClick={() => setShowLogForm(true)}
+                className="health-button"
+                size="lg"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                Log Symptom
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -919,7 +930,7 @@ const Dashboard = () => {
                     <Calendar className="h-4 w-4 mr-2" />
                     View Calendar
                   </Button>
-                  <Button variant="outline" className="w-full justify-start" onClick={() => alert('Family tracking not yet implemented!')}>
+                  <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/family')}>
                     <Users className="h-4 w-4 mr-2" />
                     Family Tracking
                   </Button>

@@ -13,6 +13,7 @@ import Profile from "./pages/Profile";
 import Pricing from "./pages/Pricing";
 import PaymentCompletion from "./pages/PaymentCompletion";
 import SymptomViewer from "./pages/SymptomViewer";
+import Family from "./pages/Family";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -46,6 +47,11 @@ const App = () => (
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/payment-completion" element={<PaymentCompletion />} />
             <Route path="/symptoms" element={<SymptomViewer />} />
+            <Route path="/family" element={
+              <ProtectedRoute>
+                <Family />
+              </ProtectedRoute>
+            } />
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<UserManagement />} />
