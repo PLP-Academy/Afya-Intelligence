@@ -380,7 +380,7 @@ const Dashboard = () => {
                 <Heart className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="font-bold">Symptom Journal</h1>
+                <h1 className="font-bold">Afya Intelligence</h1>
                 <p className="text-xs text-muted-foreground">Dashboard</p>
               </div>
             </div>

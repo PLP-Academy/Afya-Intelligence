@@ -84,7 +84,7 @@ export async function generateAIInsights(symptoms: SymptomData[], tier: Subscrip
   if (symptoms.length === 0) {
     return [{
       type: 'education',
-      message: 'Welcome to your Symptom Journal! Start logging your symptoms to receive personalized health insights and track patterns over time.',
+      message: 'Welcome to Afya Intelligence! Start logging your symptoms to receive personalized AI health insights and track patterns over time.',
       severity: 'low',
       tierLevel: 'basic'
     }];

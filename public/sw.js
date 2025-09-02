@@ -1,5 +1,5 @@
-// Symptom Journal Service Worker
-const CACHE_NAME = 'symptom-journal-v1';
+// Afya Intelligence Service Worker
+const CACHE_NAME = 'afya-intelligence-v1';
 const CACHE_URLS = [
   '/',
   '/dashboard',
@@ -133,7 +133,7 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification('Symptom Journal', options)
+    self.registration.showNotification('Afya Intelligence', options)
   );
 });
 

@@ -1,7 +1,7 @@
 {
-  "name": "Symptom Journal",
-  "short_name": "SymptomJ",
-  "description": "Empowering communities with accessible health tracking and education to achieve UN SDG 3: Good Health and Well-Being",
+    "name": "Afya Intelligence",
+    "short_name": "Afya",
+    "description": "Track your health journey with AI insights and contribute to UN SDG 3 global wellness goals through personalized symptom analysis",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

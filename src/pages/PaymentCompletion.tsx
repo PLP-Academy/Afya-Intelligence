@@ -175,7 +175,7 @@ const PaymentCompletion = () => {
           <div className="w-8 h-8 rounded-lg health-gradient flex items-center justify-center mx-auto mb-4">
             <Heart className="h-5 w-5 text-white" />
           </div>
-          <CardTitle className="text-2xl mb-2">Symptom Journal</CardTitle>
+          <CardTitle className="text-2xl mb-2">Afya Intelligence</CardTitle>
           <CardDescription>Payment Verification</CardDescription>
         </CardHeader>
 

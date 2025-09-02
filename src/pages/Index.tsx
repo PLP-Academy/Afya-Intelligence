@@ -176,7 +176,7 @@ const Index = () => {
           <div className="flex items-center gap-3">
             <Download className="h-5 w-5" />
             <div>
-              <p className="font-semibold">Install Symptom Journal</p>
+              <p className="font-semibold">Install Afya Intelligence</p>
               <p className="text-sm opacity-90">Get the full app experience</p>
             </div>
             <Button 
@@ -209,7 +209,7 @@ const Index = () => {
                 <Heart className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="font-bold text-lg">Symptom Journal</h1>
+                <h1 className="font-bold text-lg">Afya Intelligence</h1>
                 <p className="text-xs text-muted-foreground">SDG 3 Health Platform</p>
               </div>
             </div>
