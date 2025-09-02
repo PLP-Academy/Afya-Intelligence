@@ -14,6 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_users: {
+        Row: {
+          assigned_by: string | null
+          created_at: string | null
+          id: string
+          permissions: Json | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          assigned_by?: string | null
+          created_at?: string | null
+          id?: string
+          permissions?: Json | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          assigned_by?: string | null
+          created_at?: string | null
+          id?: string
+          permissions?: Json | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_users_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_users_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          changes: Json | null
+          created_at: string | null
+          id: string
+          ip_address: unknown | null
+          metadata: Json | null
+          resource_id: string | null
+          resource_type: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          changes?: Json | null
+          created_at?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          changes?: Json | null
+          created_at?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       community_impact: {
         Row: {
           id: string
@@ -74,21 +155,125 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_invoices: {
+        Row: {
+          amount: number
+          created_at: string | null
+          currency: string | null
+          id: string
+          invoice_data: Json | null
+          paid_at: string | null
+          status: string
+          subscription_id: string | null
+          tracking_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          invoice_data?: Json | null
+          paid_at?: string | null
+          status?: string
+          subscription_id?: string | null
+          tracking_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          invoice_data?: Json | null
+          paid_at?: string | null
+          status?: string
+          subscription_id?: string | null
+          tracking_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_invoices_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_logs: {
+        Row: {
+          amount: number
+          completed_at: string | null
+          created_at: string | null
+          currency: string | null
+          id: string
+          metadata: Json | null
+          payment_provider: string | null
+          payment_type: string
+          phone_number: string | null
+          status: string
+          target_tier: Database["public"]["Enums"]["subscription_tier"]
+          tracking_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          completed_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          metadata?: Json | null
+          payment_provider?: string | null
+          payment_type: string
+          phone_number?: string | null
+          status: string
+          target_tier: Database["public"]["Enums"]["subscription_tier"]
+          tracking_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          completed_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          metadata?: Json | null
+          payment_provider?: string | null
+          payment_type?: string
+          phone_number?: string | null
+          status?: string
+          target_tier?: Database["public"]["Enums"]["subscription_tier"]
+          tracking_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       symptoms: {
         Row: {
           id: string
+          severity: number | null
           symptom: string
           timestamp: string | null
           user_id: string
         }
         Insert: {
           id?: string
+          severity?: number | null
           symptom: string
           timestamp?: string | null
           user_id: string
         }
         Update: {
           id?: string
+          severity?: number | null
           symptom?: string
           timestamp?: string | null
           user_id?: string
@@ -102,6 +287,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      system_metrics: {
+        Row: {
+          dimensions: Json | null
+          id: string
+          metric_name: string
+          metric_type: string
+          metric_value: number
+          timestamp: string | null
+        }
+        Insert: {
+          dimensions?: Json | null
+          id?: string
+          metric_name: string
+          metric_type: string
+          metric_value: number
+          timestamp?: string | null
+        }
+        Update: {
+          dimensions?: Json | null
+          id?: string
+          metric_name?: string
+          metric_type?: string
+          metric_value?: number
+          timestamp?: string | null
+        }
+        Relationships: []
       }
       user_education_progress: {
         Row: {
@@ -148,6 +360,48 @@ export type Database = {
           },
         ]
       }
+      user_subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean | null
+          cancelled_at: string | null
+          created_at: string | null
+          current_period_end: string
+          current_period_start: string
+          id: string
+          metadata: Json | null
+          status: string
+          tier: Database["public"]["Enums"]["subscription_tier"]
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean | null
+          cancelled_at?: string | null
+          created_at?: string | null
+          current_period_end: string
+          current_period_start?: string
+          id?: string
+          metadata?: Json | null
+          status?: string
+          tier: Database["public"]["Enums"]["subscription_tier"]
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean | null
+          cancelled_at?: string | null
+          created_at?: string | null
+          current_period_end?: string
+          current_period_start?: string
+          id?: string
+          metadata?: Json | null
+          status?: string
+          tier?: Database["public"]["Enums"]["subscription_tier"]
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       users: {
         Row: {
           created_at: string | null
@@ -159,6 +413,8 @@ export type Database = {
           impact_notifications: boolean | null
           intasend_customer_id: string | null
           password_hash: string | null
+          phone_number: string | null
+          role: Database["public"]["Enums"]["app_role"] | null
           subscription_end_date: string | null
           subscription_id: string | null
           tier: Database["public"]["Enums"]["subscription_tier"] | null
@@ -176,6 +432,8 @@ export type Database = {
           impact_notifications?: boolean | null
           intasend_customer_id?: string | null
           password_hash?: string | null
+          phone_number?: string | null
+          role?: Database["public"]["Enums"]["app_role"] | null
           subscription_end_date?: string | null
           subscription_id?: string | null
           tier?: Database["public"]["Enums"]["subscription_tier"] | null
@@ -193,6 +451,8 @@ export type Database = {
           impact_notifications?: boolean | null
           intasend_customer_id?: string | null
           password_hash?: string | null
+          phone_number?: string | null
+          role?: Database["public"]["Enums"]["app_role"] | null
           subscription_end_date?: string | null
           subscription_id?: string | null
           tier?: Database["public"]["Enums"]["subscription_tier"] | null
@@ -207,13 +467,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin: {
+        Args: { _user_id?: string }
+        Returns: boolean
+      }
+      is_super_admin: {
+        Args: { _user_id?: string }
+        Returns: boolean
+      }
+      update_system_metrics: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
+      app_role: "user" | "admin" | "super_admin"
       subscription_tier:
         | "community_advocate"
         | "health_champion"
         | "global_advocate"
+        | "enterprise"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -341,10 +614,12 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["user", "admin", "super_admin"],
       subscription_tier: [
         "community_advocate",
         "health_champion",
         "global_advocate",
+        "enterprise",
       ],
     },
   },
