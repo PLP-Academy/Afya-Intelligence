@@ -60,19 +60,36 @@ const SubscriptionManagement = () => {
     try {
       const { data, error } = await supabase
         .from('user_subscriptions')
-        .select(`
-          *,
-          users!inner(email, full_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const subscriptionsWithUserData = (data || []).map(sub => ({
-        ...sub,
-        user_email: (sub as any).users?.email,
-        user_name: (sub as any).users?.full_name
-      }));
+      // Get user data separately if needed
+      const subscriptionsWithUserData = await Promise.all(
+        (data || []).map(async (sub) => {
+          try {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('email, full_name')
+              .eq('id', sub.user_id)
+              .single();
+
+            return {
+              ...sub,
+              user_email: userData?.email,
+              user_name: userData?.full_name
+            };
+          } catch (err) {
+            // If user lookup fails, show the user_id instead
+            return {
+              ...sub,
+              user_email: `User: ${sub.user_id.slice(0, 8)}...`,
+              user_name: null
+            };
+          }
+        })
+      );
 
       setSubscriptions(subscriptionsWithUserData);
     } catch (error) {
@@ -151,9 +168,8 @@ const SubscriptionManagement = () => {
 
     await updateSubscription(subscriptionId, {
       status: 'cancelled',
-      cancelled_at: new Date().toISOString(),
       cancel_at_period_end: true
-    } as any);
+    });
   };
 
   const reactivateSubscription = async (subscriptionId: string) => {
@@ -201,7 +217,7 @@ const SubscriptionManagement = () => {
 
     await updateSubscription(editingSubscription.id, {
       status: editingSubscription.status,
-      tier: editingSubscription.tier,
+      tier: editingSubscription.tier as 'community_advocate' | 'health_champion' | 'global_advocate',
       cancel_at_period_end: editingSubscription.cancel_at_period_end
     });
 

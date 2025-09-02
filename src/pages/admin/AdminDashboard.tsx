@@ -28,6 +28,15 @@ interface DashboardStats {
   }>;
 }
 
+interface AuditLogActivity {
+  id: string;
+  action: string;
+  resource_type: string;
+  created_at: string;
+  user_id: string;
+  users?: { email?: string };
+}
+
 const AdminDashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -41,48 +50,67 @@ const AdminDashboard = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      
-      // Load basic stats
-      const [
-        { data: users, error: usersError },
-        { data: subscriptions, error: subsError },
-        { data: symptoms, error: symptomsError },
-        { data: recentUsers, error: recentUsersError },
-        { data: recentActivity, error: activityError }
-      ] = await Promise.all([
-        supabase.from('users').select('*', { count: 'exact' }),
-        supabase.from('user_subscriptions').select('*', { count: 'exact' }).eq('status', 'active'),
-        supabase.from('symptoms').select('*', { count: 'exact' }).gte('timestamp', new Date().toISOString().split('T')[0]),
-        supabase.from('users').select('id, email, full_name, created_at, tier').order('created_at', { ascending: false }).limit(5),
-        supabase.from('audit_logs').select(`
-          id, action, resource_type, created_at,
-          user_id,
-          users!inner(email)
-        `).order('created_at', { ascending: false }).limit(10)
-      ]);
 
-      if (usersError || subsError || symptomsError || recentUsersError || activityError) {
-        throw new Error('Failed to load dashboard data');
+      // Load basic stats individually to handle failures gracefully
+      let totalUsers = 0, activeSubscriptions = 0, dailySymptoms = 0, recentUsers = [], recentActivity = [];
+
+      try {
+        const { count } = await supabase.from('users').select('*', { count: 'exact', head: true });
+        totalUsers = count || 0;
+      } catch (err) {
+        console.warn('Could not load user count:', err);
+      }
+
+      try {
+        const { count } = await supabase.from('user_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active');
+        activeSubscriptions = count || 0;
+      } catch (err) {
+        console.warn('Could not load subscription count:', err);
+      }
+
+      try {
+        const { count } = await supabase.from('symptoms').select('*', { count: 'exact', head: true }).gte('timestamp', new Date().toISOString().split('T')[0]);
+        dailySymptoms = count || 0;
+      } catch (err) {
+        console.warn('Could not load symptoms count:', err);
+      }
+
+      try {
+        const { data } = await supabase.from('users').select('id, email, full_name, created_at, tier').order('created_at', { ascending: false }).limit(5);
+        recentUsers = data || [];
+      } catch (err) {
+        console.warn('Could not load recent users:', err);
+      }
+
+      try {
+        const { data } = await supabase
+          .from('audit_logs')
+          .select('id, action, resource_type, created_at, user_id')
+          .order('created_at', { ascending: false })
+          .limit(10);
+        recentActivity = (data || []).map((activity) => ({
+          ...activity,
+          user_email: `User ${activity.user_id.slice(0, 8)}...`
+        }));
+      } catch (err) {
+        console.warn('Could not load audit logs (this may not be a problem):', err);
       }
 
       // Calculate monthly revenue (mock data for now)
-      const monthlyRevenue = (subscriptions?.length || 0) * 150; // Assuming average 150 KES per subscription
+      const monthlyRevenue = activeSubscriptions * 150; // Assuming average 150 KES per subscription
 
       setStats({
-        totalUsers: users?.length || 0,
-        activeSubscriptions: subscriptions?.length || 0,
-        dailySymptoms: symptoms?.length || 0,
+        totalUsers,
+        activeSubscriptions,
+        dailySymptoms,
         monthlyRevenue,
-        recentUsers: recentUsers || [],
-        recentActivity: (recentActivity || []).map(activity => ({
-          ...activity,
-          user_email: (activity as any).users?.email
-        }))
+        recentUsers,
+        recentActivity
       });
 
     } catch (err) {
       console.error('Error loading dashboard data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      setError(err instanceof Error ? err.message : 'Failed to load some dashboard data');
     } finally {
       setLoading(false);
     }

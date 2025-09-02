@@ -62,6 +62,8 @@ export interface AuthUser {
  */
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   try {
+    console.log('🔍 Fetching user profile for ID:', userId);
+
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -69,10 +71,35 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
       .single();
 
     if (error) {
+      // If user profile doesn't exist, try to create it
+      if (error.code === 'PGRST116') {
+        console.log('📝 User profile not found, attempting to create...');
+
+        // Get user metadata from auth
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+        if (authError) {
+          console.error('Error getting auth user:', authError);
+          return null;
+        }
+
+        if (user) {
+          const created = await createUserProfile(user.id, user.email || '', user.user_metadata?.full_name || user.user_metadata?.name);
+          if (created) {
+            console.log('✅ User profile created successfully');
+            // Fetch the newly created profile
+            return await getUserProfile(userId);
+          }
+        }
+
+        return null;
+      }
+
       console.error('Error fetching user profile:', error);
       return null;
     }
 
+    console.log('✅ User profile found:', data);
     return data;
   } catch (error) {
     console.error('Failed to get user profile:', error);

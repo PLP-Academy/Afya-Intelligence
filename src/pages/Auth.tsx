@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from '@/integrations/supabase/client';
 import { Heart, ArrowLeft, Loader2 } from 'lucide-react';
 
 const Auth = () => {
@@ -33,11 +34,32 @@ const Auth = () => {
         if (error) {
           setError(error.message);
         } else {
-          toast({
-            title: "Welcome back!",
-            description: "You've been successfully signed in.",
-          });
-          navigate('/dashboard');
+          // Check user role for redirect
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from('users')
+              .select('role')
+              .eq('id', user.id)
+              .single();
+
+            const role = profile?.role;
+            if (role === 'admin' || role === 'super_admin') {
+              toast({
+                title: "Admin Access Granted",
+                description: "You've been signed in as an administrator.",
+              });
+              navigate('/admin');
+            } else {
+              toast({
+                title: "Welcome back!",
+                description: "You've been successfully signed in.",
+              });
+              navigate('/dashboard');
+            }
+          } else {
+            navigate('/dashboard');
+          }
         }
       } else {
         if (password !== confirmPassword) {

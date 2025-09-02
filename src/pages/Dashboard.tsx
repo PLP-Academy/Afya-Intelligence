@@ -46,7 +46,12 @@ const Dashboard = () => {
 
   const [newSymptom, setNewSymptom] = useState('');
   const [severity, setSeverity] = useState(1);
-  const [aiInsights, setAiInsights] = useState<any[]>([]);
+  const [aiInsights, setAiInsights] = useState<Array<{
+    type: string;
+    message: string;
+    severity: string;
+    tierLevel?: string;
+  }>>([]);
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -158,7 +163,7 @@ const Dashboard = () => {
   // Mutation for logging a new symptom
   const logSymptomMutation = useMutation({
     mutationFn: async (symptomData: { symptom: string; severity: number; timestamp: string; user_id: string }) => {
-      console.log('Attempting to insert symptom:', symptomData);
+      console.log('🔄 Attempting to log symptom:', symptomData);
       const { data, error } = await supabase
         .from('symptoms')
         .insert([{
@@ -168,33 +173,37 @@ const Dashboard = () => {
           user_id: symptomData.user_id,
         }])
         .select();
-      
-      console.log('Supabase response:', { data, error });
 
       if (error) {
-        console.error('Supabase insert error:', error);
+        console.error('❌ Supabase insert error:', error);
         throw error;
       }
+
+      console.log('✅ Symptom logged successfully:', data);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('🎉 Symptom logging completed:', data);
       queryClient.invalidateQueries({ queryKey: ['symptoms'] });
       // Clear insights to trigger regeneration when symptoms change
       setAiInsights([]);
     },
-    onError: (error: any) => { // Explicitly type error as any for now to access .message and .details
-      console.error('Failed to log symptom:', error.message || error);
-      if (error.details) {
-        console.error('Supabase error details:', error.details);
-      }
+    onError: (error: Error) => {
+      console.error('🚫 Failed to log symptom:', error.message);
+
       // Handle offline storage if mutation fails due to network
-      const symptomData = {
-        symptom: newSymptom,
-        severity: severity,
-        timestamp: new Date().toISOString(),
-        user_id: authUser?.id || ''
-      };
-      storeOfflineSymptom(symptomData);
+      if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+        console.log('📦 Storing symptom offline due to network issues');
+        const symptomData = {
+          symptom: newSymptom,
+          severity: severity,
+          timestamp: new Date().toISOString(),
+          user_id: authUser?.id || ''
+        };
+        storeOfflineSymptom(symptomData);
+      } else {
+        console.error('Database error:', error);
+      }
     }
   });
 

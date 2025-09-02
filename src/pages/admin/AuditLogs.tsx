@@ -48,10 +48,7 @@ const AuditLogs = () => {
       setLoading(true);
       let query = supabase
         .from('audit_logs')
-        .select(`
-          *,
-          users!audit_logs_user_id_fkey(email)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(1000);
 
@@ -65,19 +62,39 @@ const AuditLogs = () => {
 
       if (error) throw error;
 
-      const logsWithUserEmail: AuditLog[] = (data || []).map(log => ({
-        id: log.id,
-        user_id: log.user_id,
-        action: log.action || '',
-        resource_type: log.resource_type || '',
-        resource_id: log.resource_id,
-        changes: log.changes,
-        metadata: log.metadata,
-        created_at: log.created_at || new Date().toISOString(),
-        ip_address: log.ip_address as string || null,
-        user_agent: log.user_agent as string || null,
-        user_email: (log as any).users?.email
-      }));
+      // Get user emails separately if needed
+      const logsWithUserEmail: AuditLog[] = await Promise.all(
+        (data || []).map(async (log) => {
+          let userEmail = null;
+          if (log.user_id) {
+            try {
+              const { data: userData } = await supabase
+                .from('users')
+                .select('email')
+                .eq('id', log.user_id)
+                .single();
+              userEmail = userData?.email;
+            } catch (err) {
+              // If user lookup fails, show user ID
+              userEmail = `User: ${log.user_id.slice(0, 8)}...`;
+            }
+          }
+
+          return {
+            id: log.id,
+            user_id: log.user_id,
+            action: log.action || '',
+            resource_type: log.resource_type || '',
+            resource_id: log.resource_id,
+            changes: log.changes,
+            metadata: log.metadata,
+            created_at: log.created_at || new Date().toISOString(),
+            ip_address: log.ip_address as string || null,
+            user_agent: log.user_agent as string || null,
+            user_email: userEmail
+          };
+        })
+      );
 
       setLogs(logsWithUserEmail);
     } catch (error) {

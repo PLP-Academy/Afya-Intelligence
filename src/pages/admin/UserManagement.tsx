@@ -90,25 +90,45 @@ const UserManagement = () => {
     }
   };
 
-  const deleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+  const deactivateUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to deactivate this user? They will not be able to log in.')) {
       return;
     }
 
     try {
-      const { error } = await supabase.auth.admin.deleteUser(userId);
+      const { error } = await supabase.from('users').update({ verified: false }).eq('id', userId);
       if (error) throw error;
 
-      setUsers(users.filter(user => user.id !== userId));
+      setUsers(users.map(user => user.id === userId ? { ...user, verified: false } : user));
       toast({
         title: "Success",
-        description: "User deleted successfully",
+        description: "User deactivated successfully",
       });
     } catch (error) {
-      console.error('Error deleting user:', error);
+      console.error('Error deactivating user:', error);
       toast({
         title: "Error",
-        description: "Failed to delete user",
+        description: "Failed to deactivate user",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const activateUser = async (userId: string) => {
+    try {
+      const { error } = await supabase.from('users').update({ verified: true }).eq('id', userId);
+      if (error) throw error;
+
+      setUsers(users.map(user => user.id === userId ? { ...user, verified: true } : user));
+      toast({
+        title: "Success",
+        description: "User activated successfully",
+      });
+    } catch (error) {
+      console.error('Error activating user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to activate user",
         variant: "destructive",
       });
     }
@@ -302,12 +322,12 @@ const UserManagement = () => {
                           <Shield className="h-3 w-3" />
                         </Button>
                       )}
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
-                        onClick={() => deleteUser(user.id)}
+                        onClick={() => user.verified ? deactivateUser(user.id) : activateUser(user.id)}
                       >
-                        <Trash2 className="h-3 w-3" />
+                        {user.verified ? <Trash2 className="h-3 w-3" /> : <Shield className="h-3 w-3" />}
                       </Button>
                     </div>
                   </TableCell>

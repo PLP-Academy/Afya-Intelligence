@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, ShieldAlert } from 'lucide-react';
@@ -11,6 +12,7 @@ interface AdminGuardProps {
 
 const AdminGuard = ({ children, requireSuperAdmin = false }: AdminGuardProps) => {
   const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -19,9 +21,20 @@ const AdminGuard = ({ children, requireSuperAdmin = false }: AdminGuardProps) =>
     checkAdminAccess();
   }, [user, requireSuperAdmin]);
 
+  useEffect(() => {
+    if (!loading && !authLoading && !hasAccess) {
+      if (!user) {
+        navigate('/auth');
+      } else {
+        // User authenticated but not admin, redirect to dashboard
+        navigate('/dashboard');
+      }
+    }
+  }, [loading, authLoading, hasAccess, user, navigate]);
+
   const checkAdminAccess = async () => {
     if (authLoading) return;
-    
+
     if (!user) {
       setHasAccess(false);
       setLoading(false);
@@ -41,7 +54,7 @@ const AdminGuard = ({ children, requireSuperAdmin = false }: AdminGuardProps) =>
       } else {
         const role = profile?.role || 'user';
         setUserRole(role);
-        
+
         if (requireSuperAdmin) {
           setHasAccess(role === 'super_admin');
         } else {
